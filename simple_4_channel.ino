@@ -176,4 +176,116 @@ void measureBatteryTemp() {
   
 }
 
+float pulseCountToTemp(int pulseCount) {
+  
+  float resistance; // Variable to store thermistor resistance
+  float temperature; // Variable to store thermistor temperature
+  
+  float pulseLength = 10; // Variable to store pulse length in milliseconds
+  float capacitorValue = 10e-6; // Variable to store capacitor value in farads
+  float analogVoltage = 5; // Variable to store analog pin voltage in volts
+  
+  resistance = (analogVoltage * capacitorValue * pulseCount * 1000) / (pulseLength * log(2)); // Calculate resistance from pulse count using Kirchhoff's law
+  
+  temperature = 1 / (log(resistance / 10000) / 3950 + 1 / 298.15) - 273.15; // Calculate temperature from resistance using a formula that depends on the thermistor parameters
+  
+  return temperature; // Return temperature
+  
+}
 
+void calculateBatteryDT() {
+  
+  for (int i = 0; i < 4; i++) { // Loop through each channel
+    
+    batteryDT[i] = batteryTemp[i] - ambientTemp; // Calculate battery temperature difference
+    
+    Serial.print("Channel ");
+    Serial.print(i + 1);
+    Serial.print(" battery temperature difference: ");
+    Serial.print(batteryDT[i]);
+    Serial.println(" C");
+    
+  }
+  
+}
+
+
+void updateBufferDT() {
+  
+  for (int i = 0; i < 4; i++) { // Loop through each channel
+    
+    bufferIndex[i] = (bufferIndex[i] + 1) % BUFFER_SIZE; // Update buffer index in a circular way
+    
+    bufferDT[i][bufferIndex[i]] = batteryDT[i]; // Store battery temperature difference in buffer
+    
+    Serial.print("Channel ");
+    Serial.print(i + 1);
+    Serial.print(" buffer: ");
+    
+    for (int j = 0; j < BUFFER_SIZE; j++) { // Print buffer values
+      
+      Serial.print(bufferDT[i][j]);
+      Serial.print(" ");
+      
+    }
+    
+    Serial.println();
+    
+  }
+  
+}
+
+void checkChargingStatus() {
+  
+  for (int i = 0; i < 4; i++) { // Loop through each channel
+    
+    if (charging[i]) { // If channel is charging
+      
+      bool risingTrend = true; // Variable to store if there is a rising trend in buffer
+      
+      for (int j = 0; j < BUFFER_SIZE - 1; j++) { // Loop through buffer values
+        
+        int index1 = (bufferIndex[i] + j) % BUFFER_SIZE; // Get first index
+        int index2 = (bufferIndex[i] + j + 1) % BUFFER_SIZE; // Get second index
+        
+        if (bufferDT[i][index2] <= bufferDT[i][index1]) { // If second value is not greater than first value
+          
+          risingTrend = false; // Set rising trend to false
+          break; // Break the loop
+          
+        }
+        
+      }
+      
+      if (risingTrend && batteryDT[i] >= DT_THRESHOLD) { // If there is a rising trend and battery temperature difference is above threshold
+        
+        charging[i] = false; // Set charging status to false
+        
+        switch (i) { // Turn off channel switch
+          
+          case 0:
+            digitalWrite(CH1_PIN, LOW);
+            break;
+          case 1:
+            digitalWrite(CH2_PIN, LOW);
+            break;
+          case 2:
+            digitalWrite(CH3_PIN, LOW);
+            break;
+          case 3:
+            digitalWrite(CH4_PIN, LOW);
+            break;
+            
+        }
+        
+        Serial.print("Channel ");
+        Serial.print(i + 1);
+        Serial.println(" charging stopped.");
+        
+      }
+      
+    }
+    
+  }
+  
+}
