@@ -79,7 +79,7 @@ void loop() {
 // Check if the current time is more than BUFFER_SIZE+1 minutes since startup 
 // this ensures buffer is filled with data
 // and temperatures stabilized. 
-   if (millis()  > BUFFER_SIZE+1 * 60 * 1000) {
+   if (millis()  > (BUFFER_SIZE+1) * 60 * 1000) {
     checkChargingStatus(); // Check charging status of each channel
    }
 }
