@@ -62,7 +62,7 @@ void setup() {
 void loop() {
   
   ambientTemp = adt75.readTemperature(); // Read ambient temperature from adt75A thermometer
-  
+  ambientTemp = adt75.Measure_Temp();
   measureBatteryTemp(); // Measure battery temperature of each channel
   
   calculateBatteryDT(); // Calculate battery temperature difference of each channel
