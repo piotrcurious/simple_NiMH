@@ -102,8 +102,8 @@ void measureBatteryTemp() {
     }
     
     batteryTemp[i - CH1_THERM] = pulseCountToTemp(pulseCount[i - CH1_THERM]); 
-    /* Convert pulse count to temperature using a function that depends on the 
-       characteristics of the thermistor and the capacitor */
+    // Convert pulse count to temperature using a function that depends on the 
+       characteristics of the thermistor and the capacitor 
     
     Serial.print("Channel ");
     Serial.print(i - CH1_THERM + 1);
