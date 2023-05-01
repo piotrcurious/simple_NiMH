@@ -235,6 +235,7 @@ void updateBufferDT() {
   
 }
 
+/* simple rising trend detection. it will fail. 
 void checkChargingStatus() {
   
   for (int i = 0; i < 4; i++) { // Loop through each channel
@@ -289,3 +290,52 @@ void checkChargingStatus() {
   }
   
 }
+*/
+
+void checkChargingStatus() {
+  
+  for (int i = 0; i < 4; i++) { // Loop through each channel
+    
+    if (charging[i]) { // If channel is charging
+      
+      float bufferSum = 0; // Variable to store the sum of buffer values
+      
+      for (int j = 0; j < BUFFER_SIZE; j++) { // Loop through buffer values
+        
+        bufferSum += bufferDT[i][j]; // Add buffer value to sum
+        
+      }
+      
+      if (bufferSum >= DT_THRESHOLD * BUFFER_SIZE) { // If the average of buffer values is above threshold
+        
+        charging[i] = false; // Set charging status to false
+        
+        switch (i) { // Turn off channel switch
+          
+          case 0:
+            digitalWrite(CH1_PIN, LOW);
+            break;
+          case 1:
+            digitalWrite(CH2_PIN, LOW);
+            break;
+          case 2:
+            digitalWrite(CH3_PIN, LOW);
+            break;
+          case 3:
+            digitalWrite(CH4_PIN, LOW);
+            break;
+            
+        }
+        
+        Serial.print("Channel ");
+        Serial.print(i + 1);
+        Serial.println(" charging stopped.");
+        
+      }
+      
+    }
+    
+  }
+  
+}
+
