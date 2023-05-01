@@ -66,11 +66,22 @@ void loop() {
   measureBatteryTemp(); // Measure battery temperature of each channel
   
   calculateBatteryDT(); // Calculate battery temperature difference of each channel
-  
+
+  static unsigned long prev_time = 0; // Previous time when data was sent (milliseconds)
+
+  // Check if the current time is more than 1 minute after the previous time
+  if (millis() - prev_time > 1 * 60 * 1000) {
+    // If yes, update the previous time and update the buffer 
+    prev_time = millis();
   updateBufferDT(); // Update rolling buffer of temperature difference of each channel
-  
-  checkChargingStatus(); // Check charging status of each channel
-  
+  }
+
+// Check if the current time is more than BUFFER_SIZE+1 minutes since startup 
+// this ensures buffer is filled with data
+// and temperatures stabilized. 
+   if (millis()  > BUFFER_SIZE+1 * 60 * 1000) {
+    checkChargingStatus(); // Check charging status of each channel
+   }
 }
 
 /*
