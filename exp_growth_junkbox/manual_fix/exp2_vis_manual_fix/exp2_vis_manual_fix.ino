@@ -18,6 +18,7 @@
 //#define OLED_RESET  17
   constexpr uint32_t OLED_BITRATE = 80000000 ;
 
+#define MAX_DATASET_WINDOW 10 
 
 class AdvancedPolynomialFitter {
 private:
@@ -450,7 +451,7 @@ public:
         values.push_back(value);
 
         // Limit dataset size
-        if (timestamps.size() > 100) {
+        if (timestamps.size() > MAX_DATASET_WINDOW) {
             timestamps.erase(timestamps.begin());
             values.erase(values.begin());
         }
