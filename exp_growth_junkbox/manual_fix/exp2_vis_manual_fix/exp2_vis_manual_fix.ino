@@ -29,8 +29,8 @@ private:
 //    const float CONVERGENCE_THRESHOLD = 1e-3;
 
     // Regularization parameters
-    const float L1_LAMBDA = 0.0001;  // Lasso regularization
-    const float L2_LAMBDA = 0.001;  // Ridge regularization
+    const float L1_LAMBDA = 0.01;  // Lasso regularization
+    const float L2_LAMBDA = 0.01;  // Ridge regularization
 
  
 
@@ -67,6 +67,7 @@ private:
     }
 */
 
+/*
     // calculate using Welford's method
     double calculateMSE(const std::vector<float>& coeffs, 
                    const std::vector<float>& x, 
@@ -91,6 +92,39 @@ private:
     //Serial.println(meanSquaredError);
     return meanSquaredError;
 }
+*/
+
+double calculateMSE(const std::vector<float>& coeffs, 
+                   const std::vector<float>& x, 
+                   const std::vector<float>& y) {
+    // Normalization
+    std::vector<float> x_norm = x;
+    std::vector<float> y_norm = y;
+    double x_max = *std::max_element(x.begin(), x.end());
+    double y_max = *std::max_element(y.begin(), y.end());
+    std::transform(x.begin(), x.end(), x_norm.begin(), [x_max](double val) { return val / x_max; });
+    std::transform(y.begin(), y.end(), y_norm.begin(), [y_max](double val) { return val / y_max; });
+
+    double meanSquaredError = 0.0;
+    double mean = 0.0;
+    double M2 = 0.0;
+
+    for (size_t i = 0; i < x_norm.size(); ++i) {
+        double prediction = 0.0;
+        for (size_t j = 0; j < coeffs.size(); ++j) {
+            prediction += coeffs[j] * pow(x_norm[i], j);
+        }
+        double error = prediction - y_norm[i];
+        double squaredError = error * error;
+        double delta = squaredError - mean;
+        mean += delta / (i + 1);
+        M2 += delta * (squaredError - mean);
+    }
+
+    meanSquaredError = mean;
+    return meanSquaredError;
+}
+    
     // Gradient Descent with adaptive learning and regularization
     std::vector<float> gradientDescentFit(
         const std::vector<float>& x, 
@@ -510,7 +544,7 @@ void loop() {
     static float time = 0;
     
     // Simulated exponential growth with noise
-    float value = 100 * sin(0.2 * time) + random(-80, 80) / 10.0;
+    float value = 100 * sin(0.1 * time) + random(-80, 80) / 10.0;
     
     growthDetector.addDataPoint(time, value);
     yield();
@@ -518,7 +552,7 @@ void loop() {
     growthDetector.detectExponentialGrowth();
     
     time += random(0,+100)/100.0;
-    delay(500);
+    delay(200);
 }
 
 /*
