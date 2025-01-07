@@ -28,7 +28,7 @@ double PolynomialFitter::calculateMSE(const std::vector<float>& coeffs,
 
 std::vector<float> PolynomialFitter::fitPolynomial(const std::vector<float>& x,
                                                     const std::vector<float>& y,
-                                                    int degree) {
+                                                    int degree, OptimizationMethod method = GRADIENT_DESCENT) {
     if (x.size() != y.size() || x.empty() || degree < 1) {
         return {};
     }

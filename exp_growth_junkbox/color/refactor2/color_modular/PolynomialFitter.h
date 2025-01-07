@@ -5,6 +5,14 @@
 
 class PolynomialFitter {
 public:
+    // Optimization methods enum
+    enum OptimizationMethod {
+        GRADIENT_DESCENT,
+        LEVENBERG_MARQUARDT,
+        NELDER_MEAD,
+    };
+
+public:
     /**
      * Calculate the Mean Squared Error (MSE) for a given polynomial model.
      * @param coeffs Polynomial coefficients.
@@ -21,7 +29,7 @@ public:
      * @param degree Degree of the polynomial to fit.
      * @return Polynomial coefficients.
      */
-    std::vector<float> fitPolynomial(const std::vector<float>& x, const std::vector<float>& y, int degree);
+    std::vector<float> fitPolynomial(const std::vector<float>& x, const std::vector<float>& y, int degree, OptimizationMethod method );
 
 private:
     /**

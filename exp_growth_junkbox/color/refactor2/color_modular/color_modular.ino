@@ -1,10 +1,10 @@
 #include <Arduino.h>
-//#include "GraphicsInterface.h"
+#include "GraphicsInterface.h"
 
 // Select the display backend
-//#define USE_OLED
+#define USE_OLED
 //#define USE_ADATFT
-#define USE_ESPI
+//#define USE_ESPI
 
 #ifdef USE_OLED
 #include "OLEDGraphics.h"
@@ -17,6 +17,10 @@
 
 #include "PolynomialFitter.h"
 
+#define MAX_DATASET_WINDOW 100
+#define GROWTH_EST_BACKWARD_TIME_WINDOW 5
+#define GROWTH_EST_FORWARD_TIME_WINDOW 2
+
 class ExponentialGrowthDetector {
 private:
     PolynomialFitter polynomialFitter;
@@ -26,6 +30,7 @@ private:
 
 public:
     ExponentialGrowthDetector(GraphicsInterface* gfx) : graphics(gfx) {}
+    //ExponentialGrowthDetector()  {}
     void begin() { graphics->begin(); }
 
     void addDataPoint(float timestamp, float value) {
@@ -97,11 +102,12 @@ float computeGrowthRate(const std::vector<float>& coeffs,
         std::vector<float> lastCoeffs;
         std::vector<float> bestCoeffs;
         
-        std::vector<AdvancedPolynomialFitter::OptimizationMethod> methods = {
-            AdvancedPolynomialFitter::GRADIENT_DESCENT,
+        std::vector<PolynomialFitter::OptimizationMethod> methods = {
+            PolynomialFitter::GRADIENT_DESCENT,
             //AdvancedPolynomialFitter::LEVENBERG_MARQUARDT,
             //AdvancedPolynomialFitter::NELDER_MEAD,
         };
+
 
        // Normalize timestamps
         std::vector<float> timestamps_norm = timestamps;
@@ -155,8 +161,8 @@ float computeGrowthRate(const std::vector<float>& coeffs,
             
             
         }
-        // Visualize results
-        graphics.visualizeGrowthAnalysis(
+//         Visualize results
+        graphics->visualizeGrowthAnalysis(
             //timestamps, values, bestCoeffs, 
             timestamps, values, bestCoeffs, 
             growthDetected, bestGrowthRate
@@ -169,11 +175,14 @@ float computeGrowthRate(const std::vector<float>& coeffs,
 // Instantiate the appropriate graphics backend
 #ifdef USE_OLED
 OLEDGraphics graphicsBackend;
-#else
+#endif 
+
+#ifdef USE_ESPI
 TFTGraphics graphicsBackend;
 #endif
 
 ExponentialGrowthDetector growthDetector(&graphicsBackend);
+//ExponentialGrowthDetector growthDetector;
 
 void setup() {
     Serial.begin(115200);

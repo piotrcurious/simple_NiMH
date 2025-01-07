@@ -82,7 +82,7 @@ void OLEDGraphics::visualizeGrowthAnalysis(
     display();
 }
 
-void OLEDGraphics::displayErrorState(const std::string& errorMsg) {
+void OLEDGraphics::displayErrorState(const String& errorMsg) {
     clear();
     drawText(0, 0, "ERROR:");
     drawText(0, 10, errorMsg);

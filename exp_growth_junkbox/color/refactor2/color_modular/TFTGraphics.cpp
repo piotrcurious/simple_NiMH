@@ -1,8 +1,8 @@
 #ifdef USE_ESPI
 #include "TFTGraphics.h"
 
-TFTGraphics::TFTGraphics()
-    : tft() {}
+//TFTGraphics::TFTGraphics()
+//    : tft() {}
 
 void TFTGraphics::begin() {
     tft.init();

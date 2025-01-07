@@ -12,12 +12,12 @@ private:
     float mapFloat(float x, float in_min, float in_max, float out_min, float out_max);
 
 public:
-    OLEDGraphics();
+    //OLEDGraphics();
     void begin() override;
     void clear() override;
     void drawPixel(int x, int y, int color) override;
-    void drawText(int x, int y, const std::string& text) override;
-    void display() override;
+    void drawText(int x, int y, const String& text) override;
+    //void display() override;
     void visualizeGrowthAnalysis(
         const std::vector<float>& xData,
         const std::vector<float>& yData,
@@ -25,7 +25,7 @@ public:
         bool growthDetected,
         float growthRate
     ) override;
-    void displayErrorState(const std::string& errorMsg) override;
+    void displayErrorState(const String& errorMsg) override;
 };
 
 #endif // OLED_GRAPHICS_H
