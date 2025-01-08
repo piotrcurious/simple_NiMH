@@ -15,9 +15,12 @@ public:
     double calculateMSE(const std::vector<float>& coeffs, const std::vector<float>& x, const std::vector<float>& y);
     std::vector<float> fitPolynomial(const std::vector<float>& x, const std::vector<float>& y, int degree,
                                      OptimizationMethod method = GRADIENT_DESCENT);
+    std::vector<float> fitSegmentedPolynomials(const std::vector<float>& x, const std::vector<float>& y, int degree, int segments);
+
 
 private:
     std::vector<double> solveLinearSystem(std::vector<std::vector<double>>& A, std::vector<double>& b);
+    std::vector<float> levenbergMarquardt(const std::vector<float>& x, const std::vector<float>& y, int degree);
 };
 
 #endif
