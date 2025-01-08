@@ -80,6 +80,22 @@
 
         // Convert coefficients to float
         std::vector<float> result(coeffs.begin(), coeffs.end());
+
+        switch (method) {
+        case GRADIENT_DESCENT:
+            // Implement gradient descent here if needed
+            break;
+        case LEVENBERG_MARQUARDT:
+            result = levenbergMarquardt(x_norm, y, degree);
+            break;
+        case NELDER_MEAD:
+            // Implement Nelder-Mead here if needed
+            break;
+        default: // no optimization
+            //result = levenbergMarquardt(x_norm, y, degree);
+            break;
+    }
+        
         return result;
     }
 
