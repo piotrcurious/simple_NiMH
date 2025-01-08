@@ -83,6 +83,34 @@
         return result;
     }
 
+// Fit segmented polynomials
+std::vector<float> AdvancedPolynomialFitter::fitSegmentedPolynomials(const std::vector<float>& x, const std::vector<float>& y, int degree, int segments) {
+    std::vector<float> result;
+    size_t segmentSize = x.size() / segments;
+    
+    for (int i = 0; i < segments; ++i) {
+        size_t startIdx = i * segmentSize;
+        size_t endIdx = (i == segments - 1) ? x.size() : (i + 1) * segmentSize;
+        
+        std::vector<float> x_segment(x.begin() + startIdx, x.begin() + endIdx);
+        std::vector<float> y_segment(y.begin() + startIdx, y.begin() + endIdx);
+        
+        std::vector<float> segmentCoeffs = fitPolynomial(x_segment, y_segment, degree);
+        result.insert(result.end(), segmentCoeffs.begin(), segmentCoeffs.end());
+    }
+    
+    return result;
+}
+
+// Implement Levenberg-Marquardt algorithm
+std::vector<float> AdvancedPolynomialFitter::levenbergMarquardt(const std::vector<float>& x, const std::vector<float>& y, int degree) {
+    // Implement the iterative Levenberg-Marquardt algorithm here
+    // This is a placeholder implementation, the actual implementation would require more code
+    std::vector<float> coeffs(degree + 1, 0.0);
+    // Placeholder: actual implementation needed
+    return coeffs;
+}
+
 
     // Solve a linear system using Gaussian elimination
     std::vector<double> AdvancedPolynomialFitter::solveLinearSystem(std::vector<std::vector<double>>& A, std::vector<double>& b) {
