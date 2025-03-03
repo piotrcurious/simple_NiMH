@@ -17,9 +17,9 @@ constexpr uint32_t OLED_BITRATE = 80000000;
 #define TFT_SCREEN_HEIGHT 240
 
 // Analysis parameters
-#define MAX_DATASET_WINDOW 150
+#define MAX_DATASET_WINDOW 80
 #define MIN_DATASET_WINDOW 10 
 #define GROWTH_EST_BACKWARD_TIME_WINDOW 5.0 // seconds
-#define GROWTH_EST_FORWARD_TIME_WINDOW  5.0 // seconds
+#define GROWTH_EST_FORWARD_TIME_WINDOW  20.0 // seconds
 
 //#define REVERSED_NORMALIZATION // define wheter data is normalized from 0 to max time or from -max time to 0 . 

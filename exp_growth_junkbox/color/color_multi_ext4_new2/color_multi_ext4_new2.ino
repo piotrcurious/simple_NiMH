@@ -46,7 +46,7 @@ void loop() {
     if (ride >0) {exp_step += time_delta; 
     } else { exp_step = 0 ;}
     
-    value = 60* sin(0.12*time)+6*exp(exp_step*0.06)+ random(-80, 80) / 100.0;
+    value = 60* sin(0.12*time)+6*exp(exp_step*0.06)+ random(-800, 800) / 100.0;
     time += time_delta;
     growthDetector.addDataPoint(time, value);
     // Detect growth and visualize

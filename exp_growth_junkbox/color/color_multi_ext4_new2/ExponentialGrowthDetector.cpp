@@ -60,7 +60,7 @@ void ExponentialGrowthDetector::detectExponentialGrowth() {
 //        Serial.println(timestamps_norm[0]); 
 //        Serial.println(timestamps_norm[timestamps_norm.size()-1]);
 
-        uint8_t degree = 9; // polynomial degree
+        uint8_t degree = 8; // polynomial degree
 
         if (true || timestamps.size() >= MIN_DATASET_WINDOW && timestamps.size() < MAX_DATASET_WINDOW/2 ) {
 //        if ( timestamps.size() >= MIN_DATASET_WINDOW && timestamps.size() < MAX_DATASET_WINDOW/2 ) {
@@ -70,7 +70,7 @@ void ExponentialGrowthDetector::detectExponentialGrowth() {
         //for (uint8_t degree : degrees) {
             for (auto method : methods) {
 //                std::vector<float> coeffs = polynomialFitter.fitPolynomial(
-                  newCoeffs = polynomialFitter.fitPolynomial(timestamps_norm, values, degree, method);
+                  newCoeffs = polynomialFitter.fitPolynomial_superpos5c(timestamps_norm, values, degree, method);
                 bestCoeffs = newCoeffs; // ensure there is some fit in coeffs sent to visualizer                    
             }
             // choose polynomial with best fit.                         
