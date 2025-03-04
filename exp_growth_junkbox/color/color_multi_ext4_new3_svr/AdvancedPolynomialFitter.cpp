@@ -118,9 +118,9 @@ std::vector<float> AdvancedPolynomialFitter::fitsvm(std::vector<float>& x, const
     size_t m = degree + 1;
 
     // Normalize input data to improve numerical stability
-    double x_min = *std::min_element(x.begin(), x.end());
-    double x_max = *std::max_element(x.begin(), x.end());
-    double x_range = x_max - x_min;
+    float x_min = *std::min_element(x.begin(), x.end());
+    float x_max = *std::max_element(x.begin(), x.end());
+    float x_range = x_max - x_min;
 
     std::vector<float> x_norm(n);
     for (size_t i = 0; i < n; ++i) {
@@ -151,9 +151,9 @@ std::vector<float> AdvancedPolynomialFitter::fitsvm(std::vector<float>& x, const
 
     // Hyperparameters - adjusted for better fit
     const float C = 100000.0;
-    const float epsilon = 0.1;
+    const float epsilon = 0.01;
     const float tol = 1e-6;
-    const int maxIter = 200;
+    const int maxIter = 500;
 
     // Initialize alphas and function values
     std::vector<float> alpha(2 * n, 0.0);
@@ -206,7 +206,7 @@ std::vector<float> AdvancedPolynomialFitter::fitsvm(std::vector<float>& x, const
         iter++;
 
         // Debug progress
-        if (iter % 100 == 0) {
+        if (iter % 10 == 0) {
             Serial.print("Iteration: ");
             Serial.print(iter);
             Serial.print(", Changed: ");
@@ -240,6 +240,7 @@ std::vector<float> AdvancedPolynomialFitter::fitsvm(std::vector<float>& x, const
     }
     Serial.println();
     
+ /*
     // Calculate and print RMSE
     double rmse = 0.0;
     for (size_t i = 0; i < n; ++i) {
@@ -253,6 +254,7 @@ std::vector<float> AdvancedPolynomialFitter::fitsvm(std::vector<float>& x, const
     rmse = sqrt(rmse / n);
     Serial.print("RMSE: ");
     Serial.println(rmse);
+ */
     
     return result;
 }
@@ -266,9 +268,9 @@ int AdvancedPolynomialFitter::examineExample(
     const std::vector<float>& ls_residuals) { // Added ls_residuals
 
     // Get error
-    double y2 = y[i2];
-    double F2 = f[i2];        // f already includes Wx part
-    double r2 = F2 + b - y2;  // Add bias term separately
+    float y2 = y[i2];
+    float F2 = f[i2];        // f already includes Wx part
+    float r2 = F2 + b - y2;  // Add bias term separately
 
     // Check if KKT conditions are violated
     bool kkt_violated = false;
@@ -281,16 +283,16 @@ int AdvancedPolynomialFitter::examineExample(
 
         if (kkt_violated) {
         // Find index with maximum objective function change
-        double max_delta = 0.0;
+        float max_delta = 0.0;
         size_t i1 = i2;
 
         // First heuristic - find example with maximum error difference, weighted by LS residual - MODIFIED
         for (size_t j = 0; j < n; ++j) {
                     if ((alpha[j] > 0 && alpha[j] < C) || (alpha[j+n] > 0 && alpha[j+n] < C)) {
-                    double F1 = f[j];
-                    double r1 = F1 + b - y[j];
-                    double delta = fabs(r1 - r2);
-                    double ls_weight = 1.0 + std::abs(ls_residuals[i2]) + std::abs(ls_residuals[j]); // Weight by LS residuals
+                    float F1 = f[j];
+                    float r1 = F1 + b - y[j];
+                    float delta = fabs(r1 - r2);
+                    float ls_weight = 1.0 + std::abs(ls_residuals[i2]) + std::abs(ls_residuals[j]); // Weight by LS residuals
                     delta *= ls_weight; // Apply weight
 
                   if (delta > max_delta) {
@@ -338,29 +340,39 @@ int AdvancedPolynomialFitter::optimizePair(
     if (i1 == i2) return 0;
 
     // Get errors and kernel values
-    double y1 = y[i1];
-    double y2 = y[i2];
-    double F1 = f[i1];
-    double F2 = f[i2];
-    double r1 = F1 + b - y1;
-    double r2 = F2 + b - y2;
+    float y1 = y[i1];
+    float y2 = y[i2];
+    float F1 = f[i1];
+    float F2 = f[i2];
+    float r1 = F1 + b - y1;
+    float r2 = F2 + b - y2;
 
+
+/*
     // Sophisticated kernel caching with thread-local storage
-    static thread_local std::unordered_map<size_t, double> kernel_cache;
+    static thread_local std::unordered_map<size_t, float> kernel_cache;
     
-    auto getKernelValue = [&](size_t i, size_t j) -> double {
+    auto getKernelValue = [&](size_t i, size_t j) -> float {
         if (i > j) std::swap(i, j);
         size_t key = (i << 16) | j;  // Fast hash for pair of indices
         auto it = kernel_cache.find(key);
         if (it != kernel_cache.end()) return it->second;
-        double val = K[i][j];
+        float val = K[i][j];
         kernel_cache[key] = val;
         return val;
     };
+
     
-    double k11 = getKernelValue(i1, i1);
-    double k12 = getKernelValue(i1, i2);
-    double k22 = getKernelValue(i2, i2);
+    float k11 = getKernelValue(i1, i1);
+    float k12 = getKernelValue(i1, i2);
+    float k22 = getKernelValue(i2, i2);
+*/
+
+    // standard kernel fetch
+    
+    float k11 = K[i1][i1];
+    float k12 = K[i1][i2];
+    float k22 = K[i2][i2];
 
     // Compute kernel matrix determinant (eta)
     double eta = k11 + k22 - 2 * k12;
@@ -421,7 +433,7 @@ int AdvancedPolynomialFitter::optimizePair(
 
     // Convert net values back into separate α⁺ and α⁻
     // Use parameterized decomposition to balance positive/negative components
-    double decomposition_param = 0.5;  // Can be tuned or made adaptive
+    float decomposition_param = -1.5;  // Can be tuned or made adaptive
     
     double a1p_new, a1m_new, a2p_new, a2m_new;
 
@@ -466,10 +478,10 @@ int AdvancedPolynomialFitter::optimizePair(
 
     // Use a more robust bias update approach
     // Track separate bias terms for each constraint type
-    std::vector<double> bias_candidates;
-    std::vector<double> bias_weights;
+    std::vector<float> bias_candidates;
+    std::vector<float> bias_weights;
     
-    auto addBiasCandidate = [&](double b_value, double weight) {
+    auto addBiasCandidate = [&](float b_value, float weight) {
         bias_candidates.push_back(b_value);
         bias_weights.push_back(weight);
     };
@@ -502,7 +514,7 @@ int AdvancedPolynomialFitter::optimizePair(
     }
     
     // Use cached kernel values for more efficient function value updates
-    const int update_chunk_size = 1000;  // Update in chunks for cache efficiency
+    const int update_chunk_size = 16;  // Update in chunks for cache efficiency
     for (size_t chunk_start = 0; chunk_start < n; chunk_start += update_chunk_size) {
         size_t chunk_end = std::min(n, chunk_start + update_chunk_size);
         
