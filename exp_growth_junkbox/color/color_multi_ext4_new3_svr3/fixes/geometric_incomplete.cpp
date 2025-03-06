@@ -487,11 +487,672 @@ int AdvancedPolynomialFitter::optimizePair(
     return 1;
 }
 
-// NEW: Helper functions for the improved implementation
-
 // Compute median of a vector
 float AdvancedPolynomialFitter::computeMedian(const std::vector<float>& values) {
     if (values.empty()) return 0.0f;
     
     std::vector<float> sorted_values = values;
-    std::sort(sorted_valu
+    std::sort(sorted_values.begin(), sorted_values.end());
+    
+    size_t n = sorted_values.size();
+    if (n % 2 == 0) {
+        return (sorted_values[n/2 - 1] + sorted_values[n/2]) / 2.0f;
+    } else {
+        return sorted_values[n/2];
+    }
+}
+
+// Compute standard deviation
+float AdvancedPolynomialFitter::computeStdDev(const std::vector<float>& values, float mean) {
+    if (values.empty()) return 0.0f;
+    
+    float variance = 0.0f;
+    for (float v : values) {
+        float diff = v - mean;
+        variance += diff * diff;
+    }
+    
+    return std::sqrt(variance / values.size());
+}
+
+// Compute robust scale estimate (median absolute deviation)
+float AdvancedPolynomialFitter::computeRobustScale(const std::vector<float>& values) {
+    if (values.empty()) return 0.0f;
+    
+    float median = computeMedian(values);
+    
+    std::vector<float> abs_deviations;
+    abs_deviations.reserve(values.size());
+    
+    for (float v : values) {
+        abs_deviations.push_back(std::fabs(v - median));
+    }
+    
+    return 1.4826f * computeMedian(abs_deviations); // Consistency factor for normal distribution
+}
+
+// Compute local sensitivity based on point density
+float AdvancedPolynomialFitter::computeLocalSensitivity(const std::vector<float>& x_norm, 
+                                                       size_t index, float median_density) {
+    if (x_norm.empty() || index >= x_norm.size()) return 1.0f;
+    
+    // Compute local density ratio
+    float local_density;
+    if (index == 0) {
+        local_density = x_norm[1] - x_norm[0];
+    } else if (index == x_norm.size() - 1) {
+        local_density = x_norm[index] - x_norm[index - 1];
+    } else {
+        local_density = (x_norm[index + 1] - x_norm[index - 1]) / 2.0f;
+    }
+    
+    // Higher weight for sparse regions
+    float density_ratio = median_density / (local_density + 1e-6f);
+    
+    // Limit the maximum weight to prevent extreme values
+    return std::min(5.0f, std::max(0.2f, density_ratio));
+}
+
+// Compute SVD of feature matrix (simplified version)
+std::vector<float> AdvancedPolynomialFitter::computeSVD(const std::vector<std::vector<float>>& X) {
+    size_t n = X.size();
+    size_t m = X[0].size();
+    
+    // Simple power iteration method to estimate singular values
+    std::vector<float> singular_values(m, 0.0f);
+    std::vector<std::vector<float>> U = X; // Work with a copy
+    
+    for (size_t i = 0; i < m; ++i) {
+        // Initialize random vector
+        std::vector<float> v(m, 0.0f);
+        v[i] = 1.0f; // Simple initialization
+        
+        // Power iteration (simplified)
+        for (int iter = 0; iter < 10; ++iter) {
+            // Compute U*v
+            std::vector<float> Uv(n, 0.0f);
+            for (size_t j = 0; j < n; ++j) {
+                for (size_t k = 0; k < m; ++k) {
+                    Uv[j] += U[j][k] * v[k];
+                }
+            }
+            
+            // Compute U^T * (U*v)
+            std::vector<float> UTUv(m, 0.0f);
+            for (size_t j = 0; j < m; ++j) {
+                for (size_t k = 0; k < n; ++k) {
+                    UTUv[j] += U[k][j] * Uv[k];
+                }
+            }
+            
+            // Normalize
+            float norm = 0.0f;
+            for (float val : UTUv) {
+                norm += val * val;
+            }
+            norm = std::sqrt(norm);
+            
+            if (norm < 1e-10f) break;
+            
+            for (size_t j = 0; j < m; ++j) {
+                v[j] = UTUv[j] / norm;
+            }
+        }
+        
+        // Compute singular value
+        std::vector<float> Uv(n, 0.0f);
+        for (size_t j = 0; j < n; ++j) {
+            for (size_t k = 0; k < m; ++k) {
+                Uv[j] += U[j][k] * v[k];
+            }
+        }
+        
+        float sv_squared = 0.0f;
+        for (float val : Uv) {
+            sv_squared += val * val;
+        }
+        
+        singular_values[i] = std::sqrt(sv_squared);
+        
+        // Deflation (remove component from U)
+        for (size_t j = 0; j < n; ++j) {
+            for (size_t k = 0; k < m; ++k) {
+                U[j][k] -= singular_values[i] * Uv[j] * v[k] / sv_squared;
+            }
+        }
+    }
+    
+    // Sort singular values in descending order
+    std::sort(singular_values.begin(), singular_values.end(), std::greater<float>());
+    
+    return singular_values;
+}
+
+// Compute adaptive kernel based on data distribution
+void AdvancedPolynomialFitter::computeAdaptiveKernel(std::vector<std::vector<float>>& K,
+                                                   const std::vector<std::vector<float>>& X,
+                                                   size_t n, size_t m,
+                                                   const std::vector<float>& point_density,
+                                                   float median_density) {
+    // Compute distances and adaptive bandwidth
+    for (size_t i = 0; i < n; ++i) {
+        for (size_t j = 0; j <= i; ++j) {
+            float dist_squared = 0.0f;
+            for (size_t k = 0; k < m; ++k) {
+                float diff = X[i][k] - X[j][k];
+                dist_squared += diff * diff;
+            }
+            
+            // Adaptive bandwidth based on local density
+            float local_density_i = (i > 0 && i < n-1) ? 
+                (point_density[i] + point_density[i-1]) / 2.0f : 
+                (i == 0 ? point_density[0] : point_density[n-2]);
+                
+            float local_density_j = (j > 0 && j < n-1) ? 
+                (point_density[j] + point_density[j-1]) / 2.0f : 
+                (j == 0 ? point_density[0] : point_density[n-2]);
+                
+            float density_factor = std::sqrt((local_density_i + local_density_j) / (2.0f * median_density + 1e-10f));
+            float bandwidth = 1.0f * std::min(2.0f, std::max(0.5f, density_factor));
+            
+            // Compute kernel value with adaptive bandwidth
+            K[i][j] = std::exp(-dist_squared / (2.0f * bandwidth * bandwidth));
+            K[j][i] = K[i][j]; // Symmetric matrix
+        }
+    }
+}
+
+// Update KKT violation patterns
+void AdvancedPolynomialFitter::updateKKTViolationPatterns(size_t n, const std::vector<float>& alpha,
+                                                        const std::vector<float>& y,
+                                                        const std::vector<float>& f,
+                                                        float epsilon, float C, double b,
+                                                        std::vector<float>& kkt_history,
+                                                        std::vector<float>& kkt_gradients) {
+    for (size_t i = 0; i < n; ++i) {
+        float r = f[i] + b - y[i];
+        float kkt_violation = 0.0f;
+        
+        if (r > epsilon) {
+            if (alpha[i] > 0) kkt_violation = r - epsilon;
+            else if (alpha[i + n] < C) kkt_violation = r - epsilon;
+        } else if (r < -epsilon) {
+            if (alpha[i + n] > 0) kkt_violation = -r - epsilon;
+            else if (alpha[i] < C) kkt_violation = -r - epsilon;
+        }
+        
+        kkt_history[i] = kkt_violation;
+        
+        // Compute gradient of KKT violations
+        if (i > 0 && i < n - 1) {
+            kkt_gradients[i] = (kkt_history[i+1] - kkt_history[i-1]) / 2.0f;
+        } else if (i == 0) {
+            kkt_gradients[i] = kkt_history[1] - kkt_history[0];
+        } else { // i == n-1
+            kkt_gradients[i] = kkt_history[n-1] - kkt_history[n-2];
+        }
+    }
+}
+
+// Detect critical points in KKT pattern
+std::vector<size_t> AdvancedPolynomialFitter::detectCriticalPoints(
+    const std::vector<float>& kkt_gradients, size_t n) {
+    
+    std::vector<size_t> critical_points;
+    
+    // Detect sign changes in gradient (zero crossings)
+    for (size_t i = 1; i < n; ++i) {
+        if (kkt_gradients[i-1] * kkt_gradients[i] < 0) {
+            // Sign change detected
+            critical_points.push_back(i);
+        }
+    }
+    
+    // If too many critical points, keep only the most significant ones
+    if (critical_points.size() > 10) {
+        std::vector<std::pair<float, size_t>> significance;
+        for (size_t idx : critical_points) {
+            float sig = std::fabs(kkt_gradients[idx-1] - kkt_gradients[idx]);
+            significance.push_back({sig, idx});
+        }
+        
+        std::sort(significance.begin(), significance.end(), 
+                 [](const auto& a, const auto& b) { return a.first > b.first; });
+        
+        critical_points.clear();
+        for (size_t i = 0; i < std::min(size_t(10), significance.size()); ++i) {
+            critical_points.push_back(significance[i].second);
+        }
+        
+        // Sort by index for consistency
+        std::sort(critical_points.begin(), critical_points.end());
+    }
+    
+    return critical_points;
+}
+
+// Compute geometric influence of a point
+float AdvancedPolynomialFitter::computeGeometricInfluence(size_t idx, size_t n,
+                                                        const std::vector<float>& kkt_history,
+                                                        const std::vector<float>& kkt_gradients,
+                                                        const std::vector<size_t>& critical_points) {
+    float influence = 1.0f;
+    
+    // Base influence from KKT violation
+    influence *= (1.0f + std::fabs(kkt_history[idx]));
+    
+    // Higher influence for points with large gradient
+    influence *= (1.0f + 0.5f * std::fabs(kkt_gradients[idx]));
+    
+    // Higher influence near critical points
+    for (size_t cp : critical_points) {
+        float distance = std::fabs(static_cast<float>(idx) - static_cast<float>(cp));
+        if (distance < 0.1f * n) {
+            float proximity_factor = 1.0f + (0.1f * n - distance) / (0.1f * n);
+            influence *= proximity_factor;
+        }
+    }
+    
+    return influence;
+}
+
+// Find optimal step size for SMO update
+float AdvancedPolynomialFitter::findOptimalStepSize(float delta_init, float r1, float r2, 
+                                                  float eta, float s2, float s_total, float C) {
+    // Basic step from SMO
+    float delta = delta_init;
+    
+    // Bounds check
+    float L = std::max(-C, s_total - C);
+    float H = std::min(C, s_total + C);
+    
+    if (s2 + delta < L) delta = L - s2;
+    if (s2 + delta > H) delta = H - s2;
+    
+    // Line search to refine step size (simplified cubic interpolation)
+    const int max_line_search = 5;
+    float current_delta = delta;
+    float best_delta = delta;
+    float best_gain = (r1 - r2) * delta - 0.5f * eta * delta * delta;
+    
+    for (int i = 0; i < max_line_search; ++i) {
+        // Try a smaller step
+        float smaller_delta = 0.5f * current_delta;
+        if (s2 + smaller_delta >= L && s2 + smaller_delta <= H) {
+            float gain = (r1 - r2) * smaller_delta - 0.5f * eta * smaller_delta * smaller_delta;
+            if (gain > best_gain) {
+                best_gain = gain;
+                best_delta = smaller_delta;
+            }
+        }
+        
+        // Try a larger step
+        float larger_delta = std::min(1.5f * current_delta, H - s2);
+        if (s2 + larger_delta >= L && s2 + larger_delta <= H) {
+            float gain = (r1 - r2) * larger_delta - 0.5f * eta * larger_delta * larger_delta;
+            if (gain > best_gain) {
+                best_gain = gain;
+                best_delta = larger_delta;
+            }
+        }
+        
+        if (best_delta == current_delta) break;
+        current_delta = best_delta;
+    }
+    
+    return best_delta;
+}
+
+// Determine adaptive neighborhood size
+int AdvancedPolynomialFitter::determineAdaptiveNeighborhood(size_t idx, size_t n,
+                                                          const std::vector<float>& kkt_gradients,
+                                                          const std::vector<size_t>& critical_points) {
+    // Base neighborhood size proportional to dataset size
+    int base_size = std::max(5, static_cast<int>(0.1f * n));
+    
+    // Adjust based on local gradient
+    float gradient_factor = 1.0f;
+    if (idx < n) {
+        gradient_factor = 1.0f + 0.5f * std::fabs(kkt_gradients[idx]);
+    }
+    
+    // Narrow neighborhood near critical points for more focused search
+    float critical_factor = 1.0f;
+    for (size_t cp : critical_points) {
+        float distance = std::fabs(static_cast<float>(idx) - static_cast<float>(cp));
+        if (distance < 0.05f * n) {
+            critical_factor = std::min(critical_factor, 0.5f + distance / (0.1f * n));
+        }
+    }
+    
+    return static_cast<int>(base_size * gradient_factor * critical_factor);
+}
+
+// Compute algebraic complementarity score
+float AdvancedPolynomialFitter::computeAlgebraicComplementarity(size_t idx1, size_t idx2,
+                                                              const std::vector<float>& kkt_history,
+                                                              const std::vector<float>& kkt_gradients) {
+    // Base complementarity from KKT violations
+    float kkt_comp = 1.0f;
+    
+    if (idx1 < kkt_history.size() && idx2 < kkt_history.size()) {
+        // Prefer pairs with opposite KKT violations
+        float product = kkt_history[idx1] * kkt_history[idx2];
+        if (product < 0) {
+            kkt_comp = 2.0f; // Boost complementary points
+        }
+    }
+    
+    // Gradient complementarity (prefer opposite gradients)
+    float grad_comp = 1.0f;
+    if (idx1 < kkt_gradients.size() && idx2 < kkt_gradients.size()) {
+        float grad_product = kkt_gradients[idx1] * kkt_gradients[idx2];
+        if (grad_product < 0) {
+            grad_comp = 1.5f; // Boost points with opposite gradients
+        }
+    }
+    
+    return kkt_comp * grad_comp;
+}
+
+// Select strategic indices for optimization
+std::vector<size_t> AdvancedPolynomialFitter::selectStrategicIndices(size_t idx, size_t n, int max_samples,
+                                                                   const std::vector<float>& kkt_history,
+                                                                   const std::vector<float>& kkt_gradients) {
+    std::vector<std::pair<float, size_t>> candidates;
+    
+    // Add candidates with highest KKT violations
+    for (size_t i = 0; i < n; ++i) {
+        if (i != idx) {
+            float strategic_value = std::fabs(kkt_history[i]);
+            
+            // Boost points with opposite violations
+            if (kkt_history[i] * kkt_history[idx] < 0) {
+                strategic_value *= 2.0f;
+            }
+            
+            // Boost points with strong gradients
+            strategic_value *= (1.0f + 0.5f * std::fabs(kkt_gradients[i]));
+            
+            candidates.push_back({strategic_value, i});
+        }
+    }
+    
+    // Sort by strategic value in descending order
+    std::sort(candidates.begin(), candidates.end(),
+             [](const auto& a, const auto& b) { return a.first > b.first; });
+    
+    // Select top candidates
+    std::vector<size_t> selected;
+    for (size_t i = 0; i < std::min(static_cast<size_t>(max_samples), candidates.size()); ++i) {
+        selected.push_back(candidates[i].second);
+    }
+    
+    return selected;
+}
+
+// Optimize alpha decomposition
+void AdvancedPolynomialFitter::optimizeAlphaDecomposition(double s1_new, double s2_new, 
+                                                        float r1, float r2, float epsilon,
+                                                        double& a1p_new, double& a1m_new,
+                                                        double& a2p_new, double& a2m_new) {
+    const double precision = 1e-12;
+    
+    // Initial decomposition - set all components to zero
+    a1p_new = a1m_new = a2p_new = a2m_new = 0.0;
+    
+    // Set decomposition based on sign of s values
+    if (std::fabs(s1_new) < precision) {
+        // Zero - both components are zero
+        a1p_new = a1m_new = 0.0;
+    } else if (s1_new > 0) {
+        // Positive - first component is positive
+        a1p_new = s1_new;
+        a1m_new = 0.0;
+    } else {
+        // Negative - second component is positive
+        a1p_new = 0.0;
+        a1m_new = -s1_new;
+    }
+    
+    if (std::fabs(s2_new) < precision) {
+        // Zero - both components are zero
+        a2p_new = a2m_new = 0.0;
+    } else if (s2_new > 0) {
+        // Positive - first component is positive
+        a2p_new = s2_new;
+        a2m_new = 0.0;
+    } else {
+        // Negative - second component is positive
+        a2p_new = 0.0;
+        a2m_new = -s2_new;
+    }
+    
+    // Fine-tune decomposition based on KKT conditions
+    // This may be necessary for numerical stability near epsilon-tube boundaries
+    if (std::fabs(r1 - epsilon) < 0.01 * epsilon && a1p_new > 0) {
+        // We're near the upper epsilon boundary, prefer a1p
+        // No change needed, already using a1p
+    } else if (std::fabs(r1 + epsilon) < 0.01 * epsilon && a1m_new > 0) {
+        // We're near the lower epsilon boundary, prefer a1m
+        // No change needed, already using a1m
+    }
+    
+    if (std::fabs(r2 - epsilon) < 0.01 * epsilon && a2p_new > 0) {
+        // We're near the upper epsilon boundary, prefer a2p
+        // No change needed, already using a2p
+    } else if (std::fabs(r2 + epsilon) < 0.01 * epsilon && a2m_new > 0) {
+        // We're near the lower epsilon boundary, prefer a2m
+        // No change needed, already using a2m
+    }
+}
+
+// Calculate local curvature estimate
+double AdvancedPolynomialFitter::estimateLocalCurvature(size_t i1, size_t i2,
+                                                      const std::vector<std::vector<float>>& K,
+                                                      size_t n) {
+    // Estimate local curvature using neighboring kernel values
+    double curvature = 0.0;
+    int count = 0;
+    
+    for (size_t i = std::max(size_t(1), i1) - 1; i <= std::min(n - 1, i1 + 1); ++i) {
+        for (size_t j = std::max(size_t(1), i2) - 1; j <= std::min(n - 1, i2 + 1); ++j) {
+            if (i != i1 || j != i2) {
+                double k_center = K[i1][i2];
+                double k_neighbor = K[i][j];
+                double k_diff = k_center - k_neighbor;
+                curvature += k_diff * k_diff;
+                count++;
+            }
+        }
+    }
+    
+    return count > 0 ? curvature / count : 0.0;
+}
+
+
+// Compute weighted geometric median
+double AdvancedPolynomialFitter::computeGeometricMedian(const std::vector<float>& candidates,
+                                                      const std::vector<float>& weights) {
+    if (candidates.empty()) return 0.0;
+    if (candidates.size() == 1) return candidates[0];
+    
+    // Simple weighted median for small number of candidates
+    if (candidates.size() <= 5) {
+        // Create pairs of (candidate, weight)
+        std::vector<std::pair<float, float>> pairs;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            pairs.push_back({candidates[i], weights[i]});
+        }
+        
+        // Sort by candidate value
+        std::sort(pairs.begin(), pairs.end());
+        
+        // Calculate cumulative weights
+        float total_weight = 0.0f;
+        for (const auto& p : pairs) {
+            total_weight += p.second;
+        }
+        
+        // Find median
+        float cumulative = 0.0f;
+        for (const auto& p : pairs) {
+            cumulative += p.second;
+            if (cumulative >= total_weight / 2.0f) {
+                return p.first;
+            }
+        }
+        
+        return pairs.back().first;  // Should not reach here
+    }
+    
+    // For larger sets, use Weiszfeld's algorithm for geometric median
+    double median = 0.0;
+    double weight_sum = 0.0;
+    
+    // Start with weighted mean as initial guess
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        median += candidates[i] * weights[i];
+        weight_sum += weights[i];
+    }
+    median /= weight_sum;
+    
+    // Weiszfeld iterations (simplified)
+    const int max_iter = 5;
+    for (int iter = 0; iter < max_iter; ++iter) {
+        double numerator = 0.0;
+        double denominator = 0.0;
+        
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            double distance = std::fabs(candidates[i] - median);
+            if (distance < 1e-10) distance = 1e-10;  // Avoid division by zero
+            
+            double w = weights[i] / distance;
+            numerator += candidates[i] * w;
+            denominator += w;
+        }
+        
+        if (denominator < 1e-10) break;
+        
+        double new_median = numerator / denominator;
+        if (std::fabs(new_median - median) < 1e-6) break;
+        
+        median = new_median;
+    }
+    
+    return median;
+}
+
+// Apply algebraic correction during convergence plateaus
+void AdvancedPolynomialFitter::applyAlgebraicCorrection(size_t n, size_t m,
+                                                      std::vector<float>& alpha,
+                                                      const std::vector<std::vector<float>>& X,
+                                                      const std::vector<float>& y,
+                                                      std::vector<float>& f, double& b) {
+    // Identify alpha components to adjust
+    std::vector<size_t> adjust_indices;
+    
+    for (size_t i = 0; i < n; ++i) {
+        // Find non-zero alphas close to boundaries
+        if ((alpha[i] > 0 && alpha[i] < 0.01) || 
+            (alpha[i+n] > 0 && alpha[i+n] < 0.01)) {
+            adjust_indices.push_back(i);
+        }
+    }
+    
+    // Apply small perturbations to selected alphas
+    if (!adjust_indices.empty()) {
+        // Random number generation for perturbation
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> dist(-0.01f, 0.01f);
+        
+        for (size_t idx : adjust_indices) {
+            // Generate small perturbation
+            float perturbation = dist(gen);
+            
+            // Apply perturbation to positive component
+            if (alpha[idx] > 0) {
+                float old_alpha = alpha[idx];
+                alpha[idx] = std::max(0.0f, old_alpha + perturbation);
+                
+                // Update function values
+                float delta = alpha[idx] - old_alpha;
+                if (std::fabs(delta) > 1e-10f) {
+                    for (size_t i = 0; i < n; ++i) {
+                        float kernel_val = 0.0f;
+                        for (size_t j = 0; j < m; ++j) {
+                            kernel_val += X[idx][j] * X[i][j];
+                        }
+                        f[i] += delta * kernel_val;
+                    }
+                }
+            }
+            
+            // Apply perturbation to negative component
+            if (alpha[idx + n] > 0) {
+                float old_alpha = alpha[idx + n];
+                alpha[idx + n] = std::max(0.0f, old_alpha - perturbation);
+                
+                // Update function values
+                float delta = old_alpha - alpha[idx + n];
+                if (std::fabs(delta) > 1e-10f) {
+                    for (size_t i = 0; i < n; ++i) {
+                        float kernel_val = 0.0f;
+                        for (size_t j = 0; j < m; ++j) {
+                            kernel_val += X[idx][j] * X[i][j];
+                        }
+                        f[i] += delta * kernel_val;
+                    }
+                }
+            }
+        }
+        
+        // Update bias
+        updateBias(n, alpha, y, f, b);
+    }
+}
+
+// Update bias after algebraic correction
+void AdvancedPolynomialFitter::updateBias(size_t n, const std::vector<float>& alpha,
+                                        const std::vector<float>& y,
+                                        const std::vector<float>& f, double& b) {
+    double sum_bias = 0.0;
+    int count = 0;
+    
+    for (size_t i = 0; i < n; ++i) {
+        // Use only support vectors
+        if ((alpha[i] > 0 && alpha[i] < 1.0) || (alpha[i + n] > 0 && alpha[i + n] < 1.0)) {
+            sum_bias += y[i] - f[i];
+            count++;
+        }
+    }
+    
+    if (count > 0) {
+        b = sum_bias / count;
+    }
+}
+
+// Convert from orthogonal polynomial basis to monomial basis
+std::vector<double> AdvancedPolynomialFitter::convertOrthogonalToMonomial(
+    const std::vector<double>& orthogonal_coeffs, int degree) {
+    
+    size_t n = orthogonal_coeffs.size();
+    std::vector<double> monomial_coeffs(n, 0.0);
+    
+    // For Chebyshev polynomials
+    if (n > 0) monomial_coeffs[0] = orthogonal_coeffs[0];
+    if (n > 1) monomial_coeffs[1] = orthogonal_coeffs[1];
+    
+    // Convert higher degree terms
+    for (size_t i = 2; i < n; ++i) {
+        // Recurrence relation for Chebyshev polynomials
+        // T_0(x) = 1
+        // T_1(x) = x
+        // T_n(x) = 2x*T_{n-1}(x) - T_{n-2}(x)
+        
+        // Here we implement the inverse transformation
+        if (i == 2) {
+            monomial_coeffs[0] -= orthogonal_coeffs[2];
+            monomial_coeffs
+
