@@ -1154,5 +1154,36 @@ std::vector<double> AdvancedPolynomialFitter::convertOrthogonalToMonomial(
         // Here we implement the inverse transformation
         if (i == 2) {
             monomial_coeffs[0] -= orthogonal_coeffs[2];
-            monomial_coeffs
+            monomial_coeffs[2] = 2.0 * orthogonal_coeffs[2];
+        } else {
+            // Apply Chebyshev recurrence relation to convert each term
+            // For T_n(x) = 2x*T_{n-1}(x) - T_{n-2}(x)
+            
+            // First, add the contribution from 2x*T_{n-1}(x)
+            for (size_t j = 0; j < i; ++j) {
+                if (j + 1 < n) {
+                    monomial_coeffs[j + 1] += 2.0 * orthogonal_coeffs[i] * monomial_coeffs[j] / orthogonal_coeffs[i-1];
+                }
+            }
+            
+            // Then, subtract the contribution from T_{n-2}(x)
+            for (size_t j = 0; j < n; ++j) {
+                if (j < n) {
+                    monomial_coeffs[j] -= orthogonal_coeffs[i] * monomial_coeffs[j] / orthogonal_coeffs[i-2];
+                }
+            }
+            
+            // Apply the coefficient directly to the highest term
+            monomial_coeffs[i] = orthogonal_coeffs[i];
+        }
+    }
+    
+    // Normalize according to the degree parameter if needed
+    if (degree >= 0 && static_cast<size_t>(degree) < n) {
+        monomial_coeffs.resize(degree + 1);
+    }
+    
+    return monomial_coeffs;
+}
+
 
