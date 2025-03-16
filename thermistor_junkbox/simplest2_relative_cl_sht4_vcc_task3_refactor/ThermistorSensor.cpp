@@ -2,14 +2,14 @@
 #include "ThermistorSensor.h"
 #include <Arduino.h>
 
-ThermistorSensor::ThermistorSensor(int thermistor1Pin, int thermistor2Pin, int thermistorVccPin, double thermistor1Offset)
-    : thermistor1Pin(thermistor1Pin), thermistor2Pin(thermistor2Pin), thermistorVccPin(thermistorVccPin), thermistor1Offset(thermistor1Offset),
-      vcc_millivolts(1000.0), thermistor1Value(25.0), thermistor2Value(25.0), thermistorDiffValue(0.0),
+ThermistorSensor::ThermistorSensor(int thermistor1Pin, int thermistorVccPin, double thermistor1Offset)
+    : thermistor1Pin(thermistor1Pin), thermistorVccPin(thermistorVccPin), thermistor1Offset(thermistor1Offset),
+      vcc_millivolts(1000.0), thermistor1Value(25.0),thermistor2Value(25.0), thermistorDiffValue(0.0),
       thermistorVccValue(600.0), thermistor1RawMillivolts(300.0), lock(false), last_time(0) {}
 
 void ThermistorSensor::begin() {
     analogSetPinAttenuation(thermistor1Pin, ADC_0db);
-    analogSetPinAttenuation(thermistor2Pin, ADC_0db);
+    //analogSetPinAttenuation(thermistor2Pin, ADC_0db);
     analogSetPinAttenuation(thermistorVccPin, ADC_0db);
 }
 

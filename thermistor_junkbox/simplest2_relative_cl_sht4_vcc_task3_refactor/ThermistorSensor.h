@@ -8,7 +8,7 @@
 
 class ThermistorSensor {
 public:
-    ThermistorSensor(int thermistor1Pin, int thermistor2Pin, int thermistorVccPin, double thermistor1Offset);
+    ThermistorSensor(int thermistor1Pin, int thermistorVccPin, double thermistor1Offset);
     void begin();
     void read(double topThermistorTemperatureCelsius);
     double getTemperature1();
@@ -36,7 +36,6 @@ private:
     uint32_t last_time;
     const uint32_t update_interval = 500; // Adjust as needed
     int thermistor1Pin;
-    int thermistor2Pin;
     int thermistorVccPin;
     double thermistor1Offset;
 

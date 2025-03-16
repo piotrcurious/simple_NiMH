@@ -15,12 +15,10 @@
 // Define Thermistor pins
 #define THERMISTOR_PIN_1 36 // Analog pin for Thermistor 1
 //double THERMISTOR_1_OFFSET = -960.0;  // zero offset to cancel out slight thermistor differences
-double THERMISTOR_1_OFFSET = 13.0;  // zero offset to cancel out slight thermistor differences
+double THERMISTOR_1_OFFSET = 11.0;  // zero offset to cancel out slight thermistor differences and adc nonlinearity
 
 
 #define THERMISTOR_PIN_2 39 // Analog pin for Thermistor 2
-#define THERMISTOR_PIN_3 34 // Analog pin for Thermistor 3
-//#define THERMISTOR_PIN_4 35 // Analog pin for Thermistor 4
 #define THERMISTOR_VCC_PIN 35 // analog pin to measure VCC for thermistors
 
 // Fixed temperature ranges for scaling the plot - ADJUST IF NEEDED
@@ -53,7 +51,7 @@ TFT_eSPI tft = TFT_eSPI(); // TFT_eSPI instance
 
 // --- Temperature sensor objects
 SHT4xSensor sht4Sensor;
-ThermistorSensor thermistorSensor(THERMISTOR_PIN_1, THERMISTOR_PIN_2, THERMISTOR_VCC_PIN, THERMISTOR_1_OFFSET);
+ThermistorSensor thermistorSensor(THERMISTOR_PIN_1, THERMISTOR_VCC_PIN, THERMISTOR_1_OFFSET);
 
 // Temperature reading arrays for plotting
 float temp1_values[PLOT_WIDTH];
@@ -186,19 +184,19 @@ void displayTemperatureLabels(double temp1, double temp2, double tempDiff, float
 
     // T1 Label
     tft.setCursor(PLOT_X_START, LABEL_Y_START);
-    tft.print("T1 (Top)    : ");
+    tft.print("T1: ");
     if (!isnan(temp1)) {
         tft.printf("%.2f C", temp1);
     } else {
         tft.print("Error");
     }
     tft.setTextColor(GRAPH_COLOR_1, TFT_BLACK);
-    tft.print(" [R]");
+    tft.print(" R");
 
     // VCC Label
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(LABEL_TEXT_SIZE);
-    tft.setCursor(PLOT_X_START + 160, LABEL_Y_START);
+    tft.setCursor(PLOT_X_START + 240, LABEL_Y_START);
     tft.print("VCC:");
     if (!isnan(thermistorSensor.getVCC())) {
         tft.printf("%.2f mV", thermistorSensor.getVCC());
@@ -209,19 +207,19 @@ void displayTemperatureLabels(double temp1, double temp2, double tempDiff, float
     // T2 Label
     tft.setCursor(PLOT_X_START, LABEL_Y_START + label_line_height);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.print("T2 (Bottom) : ");
+    tft.print("T2: ");
     if (!isnan(temp2)) {
         tft.printf("%.2f C", temp2);
     } else {
         tft.print("Error");
     }
     tft.setTextColor(GRAPH_COLOR_2, TFT_BLACK);
-    tft.print(" [G]");
+    tft.print(" G");
 
     // Raw Millivolts Label
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(LABEL_TEXT_SIZE);
-    tft.setCursor(PLOT_X_START + 160, LABEL_Y_START + label_line_height);
+    tft.setCursor(PLOT_X_START + 240, LABEL_Y_START + label_line_height);
     tft.print("mV :");
     if (!isnan(t1_millivolts)) {
         tft.printf("%.2f mV", t1_millivolts);
@@ -232,14 +230,14 @@ void displayTemperatureLabels(double temp1, double temp2, double tempDiff, float
     // Diff Label
     tft.setCursor(PLOT_X_START, LABEL_Y_START + 2 * label_line_height);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.print("Diff (T1-T2): ");
+    tft.print("dT: ");
     if (!isnan(tempDiff)) {
         tft.printf("%.2f C", tempDiff);
     } else {
         tft.print("Error");
     }
     tft.setTextColor(GRAPH_COLOR_DIFF, TFT_BLACK);
-    tft.print(" [B]");
+    tft.print(" B");
 }
 
 void loop() {
