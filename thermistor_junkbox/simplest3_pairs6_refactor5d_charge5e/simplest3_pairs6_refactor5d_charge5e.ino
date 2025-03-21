@@ -249,7 +249,7 @@ unsigned long pwmStartTime = 0;
 uint32_t dutyCycle = 0 ;
 
 // --- Internal Resistance Measurement Variables ---
-const int MAX_RESISTANCE_POINTS = 50; // Maximum number of data points for internal resistance
+const int MAX_RESISTANCE_POINTS = 100; // Maximum number of data points for internal resistance
 float internalResistanceData[MAX_RESISTANCE_POINTS][2]; // [current, internal_resistance]
 int resistanceDataCount = 0;
 float internalResistanceDataPairs[MAX_RESISTANCE_POINTS][2]; // [current, internal_resistance] // from consecutive pairs
@@ -505,6 +505,15 @@ void processThermistorData(const MeasurementData& data, const String& measuremen
     tft.setCursor(PLOT_X_START + 20, PLOT_Y_START + PLOT_HEIGHT / 2 - 10);
     tft.print(measurementType);
 }
+
+void bigUglyMessage(const String& measurementType = "") {
+
+    tft.setTextColor(TFT_WHITE);
+    tft.setTextSize(2);
+    tft.setCursor(PLOT_X_START + 20, PLOT_Y_START + PLOT_HEIGHT / 2 - 10);
+    tft.print(measurementType);
+}
+
 
 // Colors
 const uint16_t BLACK = TFT_BLACK;
@@ -791,7 +800,7 @@ std::vector<std::pair<int, int>> generateDutyCyclePairs(int minDutyCycle) {
             int midDc = lowBound + (highBound - lowBound) / 2;
             MeasurementData midData = takeMeasurement(midDc, STABILIZATION_PAIRS_FIND_DELAY_MS);
             processThermistorData(midData, "Binary Searching High DC");
-            float currentDifference = std::abs(midData.current - targetHighCurrent);
+            float currentDifference = std::fabs(midData.current - targetHighCurrent);
 
             if (currentDifference < minCurrentDifference) {
                 minCurrentDifference = currentDifference;
@@ -882,10 +891,10 @@ void measureInternalResistanceLoadedUnloaded(const std::vector<std::pair<int, in
         // Calculate internal resistance for this step using the immediately following unloaded voltage
         if (loadedData.current > 0.01f) {
             float internalResistance = (unloadedData.voltage - loadedData.voltage) / loadedData.current;
-            storeResistanceData(loadedData.current, std::abs(internalResistance), internalResistanceData, resistanceDataCount);
-            Serial.printf("Calculated Internal Resistance (Loaded-Unloaded): %.3f Ohm\n", std::abs(internalResistance));
+            storeResistanceData(loadedData.current, std::fabs(internalResistance), internalResistanceData, resistanceDataCount);
+            Serial.printf("Calculated Internal Resistance (Loaded-Unloaded): %.3f Ohm\n", std::fabs(internalResistance));
             tft.setCursor(PLOT_X_START + 5, PLOT_Y_START + PLOT_HEIGHT / 2 - 30);
-            tft.printf("(L/UL): %.3f ", std::abs(internalResistance));
+            tft.printf("(L/UL): %.3f ", std::fabs(internalResistance));
         } else {
             Serial.println("Warning: Current is too low to reliably calculate internal resistance (Loaded-Unloaded).");
             storeResistanceData(loadedData.current, -1.0f, internalResistanceData, resistanceDataCount); // Indicate invalid
@@ -915,11 +924,11 @@ void measureInternalResistancePairs(const std::vector<std::pair<int, int>>& duty
         // Calculate internal resistance using the pair
         if (highData.current > lowData.current + MIN_CURRENT_DIFFERENCE_FOR_PAIR) {
             float internalResistanceConsecutive = (lowData.voltage - highData.voltage) / (highData.current - lowData.current);
-            consecutiveInternalResistances.push_back(std::abs(internalResistanceConsecutive));
-            storeResistanceData(highData.current, std::abs(internalResistanceConsecutive), internalResistanceDataPairs, resistanceDataCountPairs);
-            Serial.printf("Calculated Internal Resistance (Pair): %.3f Ohm\n", std::abs(internalResistanceConsecutive));
+            consecutiveInternalResistances.push_back(std::fabs(internalResistanceConsecutive));
+            storeResistanceData(highData.current, std::fabs(internalResistanceConsecutive), internalResistanceDataPairs, resistanceDataCountPairs);
+            Serial.printf("Calculated Internal Resistance (Pair): %.3f Ohm\n", std::fabs(internalResistanceConsecutive));
             tft.setCursor(PLOT_X_START + 5, PLOT_Y_START + PLOT_HEIGHT / 2 - 50);
-            tft.printf("(Pair): %.3f ", std::abs(internalResistanceConsecutive));
+            tft.printf("(Pair): %.3f ", std::fabs(internalResistanceConsecutive));
         } else {
             Serial.println("Warning: Current difference is too small to reliably calculate internal resistance (Pair).");
             consecutiveInternalResistances.push_back(-1.0f); // Indicate invalid
@@ -966,12 +975,12 @@ void performLinearRegression(const std::vector<float>& voltages, const std::vect
         int n = voltages.size();
         double denominator = (n * sumII - sumI * sumI);
 
-        if (std::abs(denominator) > 1e-9) {
+        if (std::fabs(denominator) > 1e-9) {
             double overallInternalResistance = (n * sumIV - sumI * sumV) / denominator;
             double openCircuitVoltage = (sumV - overallInternalResistance * sumI) / n;
 
             regressedInternalResistance = overallInternalResistance;
-            Serial.printf("Calculated Overall Internal Resistance (Linear Regression on Loaded Data): %.3f Ohm\n", std::abs(overallInternalResistance));
+            Serial.printf("Calculated Overall Internal Resistance (Linear Regression on Loaded Data): %.3f Ohm\n", std::fabs(overallInternalResistance));
             Serial.printf("Estimated Open Circuit Voltage: %.3f V\n", openCircuitVoltage);
         } else {
             Serial.println("Error: Could not calculate overall internal resistance (division by zero in regression).");
@@ -1543,8 +1552,8 @@ void storeOrAverageResistanceData(float current, float resistance, float data[][
 
             bool isIsolated = true;
             if (count > 1) {
-                float distanceToPrev = (closestIndex > 0) ? std::abs(data[closestIndex][0] - data[closestIndex - 1][0]) : isolationThreshold * 2.0f;
-                float distanceToNext = (closestIndex < count - 1) ? std::abs(data[closestIndex][0] - data[closestIndex + 1][0]) : isolationThreshold * 2.0f;
+                float distanceToPrev = (closestIndex > 0) ? std::fabs(data[closestIndex][0] - data[closestIndex - 1][0]) : isolationThreshold * 2.0f;
+                float distanceToNext = (closestIndex < count - 1) ? std::fabs(data[closestIndex][0] - data[closestIndex + 1][0]) : isolationThreshold * 2.0f;
 
                 if (distanceToPrev < isolationThreshold || distanceToNext < isolationThreshold) {
                     isIsolated = false;
@@ -1623,6 +1632,7 @@ MHElectrodeData measureMHElectrodeVoltage(int testDutyCycle) {
 // --- Modified findOptimalChargingDutyCycle function with caching ---
 int findOptimalChargingDutyCycle() {
     Serial.println("Finding optimal charging duty cycle...");
+    bigUglyMessage("finding duty cycle");
 
     int optimalDutyCycle = MIN_CHARGE_DUTY_CYCLE;
     float closestVoltageDifference = 1000.0f; // Initialize with a large value
@@ -1643,7 +1653,7 @@ int findOptimalChargingDutyCycle() {
     // Calculate and store internal resistance during initial measurement at max duty cycle (Loaded/Unloaded)
     if (dataHigh.current > 0.01f) {
         float internalResistanceLUInitial = (initialUnloadedVoltage - dataHigh.loadedVoltage) / dataHigh.current;
-        storeOrAverageResistanceData(dataHigh.current, std::abs(internalResistanceLUInitial), internalResistanceData, resistanceDataCount);
+        storeOrAverageResistanceData(dataHigh.current, std::fabs(internalResistanceLUInitial), internalResistanceData, resistanceDataCount);
         bubbleSort(internalResistanceData, resistanceDataCount); // Sort after adding
     }
 
@@ -1658,7 +1668,7 @@ int findOptimalChargingDutyCycle() {
 
     // --- Introduce a cache for MHElectrodeData ---
     std::vector<MHElectrodeData> dataCache;
-    const int MAX_CACHE_SIZE = 40; // Adjust the cache size as needed
+    const int MAX_CACHE_SIZE = MAX_RESISTANCE_POINTS; // Adjust the cache size as needed
 
     auto addToCache = [&](const MHElectrodeData& data) {
         if (dataCache.size() >= MAX_CACHE_SIZE) {
@@ -1681,20 +1691,20 @@ int findOptimalChargingDutyCycle() {
         // Calculate and store internal resistance (Loaded/Unloaded)
         if (currentData.current > 0.01f) {
             float internalResistanceLU = (currentData.unloadedVoltage - currentData.loadedVoltage) / currentData.current;
-            storeOrAverageResistanceData(currentData.current, std::abs(internalResistanceLU), internalResistanceData, resistanceDataCount);
+            storeOrAverageResistanceData(currentData.current, std::fabs(internalResistanceLU), internalResistanceData, resistanceDataCount);
             bubbleSort(internalResistanceData, resistanceDataCount); // Sort after adding
         }
 
         // --- Check cache for more opportunities to calculate internal resistance (Pair) ---
         for (const auto& cachedData : dataCache) {
-            if (std::abs(currentData.current - cachedData.current) > MIN_CURRENT_DIFFERENCE_FOR_PAIR) {
+            if (std::fabs(currentData.current - cachedData.current) > MIN_CURRENT_DIFFERENCE_FOR_PAIR) {
                 float internalResistancePair = (cachedData.loadedVoltage - currentData.loadedVoltage) / (currentData.current - cachedData.current);
-                storeOrAverageResistanceData(currentData.current, std::abs(internalResistancePair), internalResistanceDataPairs, resistanceDataCountPairs);
+                storeOrAverageResistanceData(currentData.current, std::fabs(internalResistancePair), internalResistanceDataPairs, resistanceDataCountPairs);
                 bubbleSort(internalResistanceDataPairs, resistanceDataCountPairs); // Sort after adding
             }
         }
 
-        float currentVoltageDifference = abs(currentData.loadedVoltage - targetVoltage);
+        float currentVoltageDifference = fabs(currentData.loadedVoltage - targetVoltage);
 
         Serial.printf("Binary Search - Duty Cycle: %d, Unloaded: %.3fV, Loaded: %.3fV, Target: %.3fV, Diff: %.3fV, Current: %.3fA\n",
                      midDC, currentData.unloadedVoltage, currentData.loadedVoltage, targetVoltage, currentVoltageDifference, currentData.current);
@@ -1730,20 +1740,20 @@ int findOptimalChargingDutyCycle() {
         // Calculate and store internal resistance (Loaded/Unloaded)
         if (currentData.current > 0.01f) {
             float internalResistanceLU = (currentData.unloadedVoltage - currentData.loadedVoltage) / currentData.current;
-            storeOrAverageResistanceData(currentData.current, std::abs(internalResistanceLU), internalResistanceData, resistanceDataCount);
+            storeOrAverageResistanceData(currentData.current, std::fabs(internalResistanceLU), internalResistanceData, resistanceDataCount);
             bubbleSort(internalResistanceData, resistanceDataCount); // Sort after adding
         }
 
         // --- Check cache for more opportunities to calculate internal resistance (Pair) ---
         for (const auto& cachedData : dataCache) {
-            if (std::abs(currentData.current - cachedData.current) > MIN_CURRENT_DIFFERENCE_FOR_PAIR) {
+            if (std::fabs(currentData.current - cachedData.current) > MIN_CURRENT_DIFFERENCE_FOR_PAIR) {
                 float internalResistancePair = (cachedData.loadedVoltage - currentData.loadedVoltage) / (currentData.current - cachedData.current);
-                storeOrAverageResistanceData(currentData.current, std::abs(internalResistancePair), internalResistanceDataPairs, resistanceDataCountPairs);
+                storeOrAverageResistanceData(currentData.current, std::fabs(internalResistancePair), internalResistanceDataPairs, resistanceDataCountPairs);
                 bubbleSort(internalResistanceDataPairs, resistanceDataCountPairs); // Sort after adding
             }
         }
 
-        float currentVoltageDifference = abs(currentData.loadedVoltage - targetVoltage);
+        float currentVoltageDifference = fabs(currentData.loadedVoltage - targetVoltage);
 
         Serial.printf("Fine-tuning - Duty Cycle: %d, Loaded: %.3fV, Target: %.3fV, Diff: %.3fV, Current: %.3fA\n",
                      dc, currentData.loadedVoltage, targetVoltage, currentVoltageDifference, currentData.current);
@@ -1761,7 +1771,7 @@ int findOptimalChargingDutyCycle() {
     targetVoltage = initialUnloadedVoltage + (finalData.loadedVoltage - initialUnloadedVoltage) * MH_ELECTRODE_RATIO;
 
     Serial.printf("Optimal charging duty cycle found: %d (loaded: %.3fV, target: %.3fV, diff: %.3fV)\n",
-                 optimalDutyCycle, finalData.loadedVoltage, targetVoltage, abs(finalData.loadedVoltage - targetVoltage));
+                 optimalDutyCycle, finalData.loadedVoltage, targetVoltage, fabs(finalData.loadedVoltage - targetVoltage));
 
     return optimalDutyCycle;
 }
