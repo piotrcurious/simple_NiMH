@@ -256,6 +256,13 @@ float internalResistanceDataPairs[MAX_RESISTANCE_POINTS][2]; // [current, intern
 int resistanceDataCountPairs = 0;
 float regressedInternalResistance = 0 ; 
 float regressedInternalResistancePairs = 0 ; // from consecutive pairs
+// Global variables to store the results of linear regression
+float regressedInternalResistanceSlope = 0.0f;
+float regressedInternalResistanceIntercept = 0.0f;
+
+float regressedInternalResistancePairsSlope = 0.0f;
+float regressedInternalResistancePairsIntercept = 0.0f;
+
 bool isMeasuringResistance = false;
 
 // --- Function Declarations ---
@@ -1039,10 +1046,30 @@ void measureInternalResistance() {
     bubbleSort(internalResistanceDataPairs, resistanceDataCountPairs);
 
     // Calculate average internal resistance from consecutive steps (pairs)
-    calculateAverageInternalResistance(consecutiveInternalResistances);
+//    calculateAverageInternalResistance(consecutiveInternalResistances);
 
     // Optional: Perform Linear Regression on the loaded voltage and current data
-    performLinearRegression(voltagesLoaded, currentsLoaded);
+//    performLinearRegression(voltagesLoaded, currentsLoaded);
+
+    // Perform linear regression after finding the optimal duty cycle
+    if (resistanceDataCount >= 2) {
+        if (performLinearRegression(internalResistanceData, resistanceDataCount, regressedInternalResistanceSlope, regressedInternalResistanceIntercept)) {
+            Serial.printf("Regressed Internal Resistance (Loaded/Unloaded): Slope = %.4f, Intercept = %.4f\n",
+                          regressedInternalResistanceSlope, regressedInternalResistanceIntercept);     
+        }
+    } else {
+        Serial.println("Not enough data points for linear regression of Loaded/Unloaded resistance.");
+    }
+
+    if (resistanceDataCountPairs >= 2) {
+        if (performLinearRegression(internalResistanceDataPairs, resistanceDataCountPairs, regressedInternalResistancePairsSlope, regressedInternalResistancePairsIntercept)) {
+            Serial.printf("Regressed Internal Resistance (Pairs): Slope = %.4f, Intercept = %.4f\n",
+                          regressedInternalResistancePairsSlope, regressedInternalResistancePairsIntercept);
+        }
+    } else {
+        Serial.println("Not enough data points for linear regression of paired resistance.");
+    }
+
 
     // Measurement complete
     Serial.printf("Internal resistance measurement complete. %d loaded/unloaded points, %d pair points collected.\n", resistanceDataCount, resistanceDataCountPairs);
@@ -1206,14 +1233,14 @@ void displayInternalResistanceGraph() {
     tft.setCursor(graphXStart - 30, graphYEnd - 10);
     tft.printf("%.2f", minResistance);
 
+
+/*
     // --- Add the overall internal resistance line and label ---
     if (dataFound) {
         if (regressedInternalResistance >= minResistance && regressedInternalResistance <= maxResistance) {
             int overallResistanceY = mapf(regressedInternalResistance, minResistance, maxResistance, graphYEnd, graphYStart);
-
             // Draw a horizontal line
             tft.drawLine(graphXStart, overallResistanceY, graphXEnd, overallResistanceY, TFT_WHITE);
-
             // Add a label for the line
             tft.setTextSize(1);
             tft.setTextColor(TFT_WHITE);
@@ -1234,6 +1261,114 @@ void displayInternalResistanceGraph() {
             tft.printf("R_int > %.2f", maxResistance);
         }
     }
+
+    if (dataFound) {
+        if (regressedInternalResistancePairs >= minResistance && regressedInternalResistancePairs <= maxResistance) {
+            int overallResistanceY = mapf(regressedInternalResistancePairs, minResistance, maxResistance, graphYEnd, graphYStart);
+            // Draw a horizontal line
+            tft.drawLine(graphXStart, overallResistanceY, graphXEnd, overallResistanceY, TFT_WHITE);
+            // Add a label for the line
+            tft.setTextSize(1);
+            tft.setTextColor(TFT_WHITE);
+            char buffer[20];
+            snprintf(buffer, sizeof(buffer), "Rint: %.2f", regressedInternalResistancePairs);
+            tft.setCursor(graphXEnd - 50, overallResistanceY - 20); // Adjust position as needed
+            tft.print(buffer);
+            // tft.print((char)937); //ohm
+        } else if (regressedInternalResistancePairs < minResistance) {
+            tft.setTextSize(1);
+            tft.setTextColor(TFT_WHITE);
+            tft.setCursor(graphXEnd - 50, graphYEnd - 10); // Adjust position as needed
+            tft.printf("R_int < %.2f", minResistance);
+        } else if (regressedInternalResistancePairs > maxResistance) {
+            tft.setTextSize(1);
+            tft.setTextColor(TFT_WHITE);
+            tft.setCursor(graphXEnd - 50, graphYStart + 10); // Adjust position as needed
+            tft.printf("R_int > %.2f", maxResistance);
+        }
+    }
+*/
+
+   // --- Add the overall internal resistance line and label (Loaded/Unloaded Regression) ---
+    if (dataFound) {
+        if (resistanceDataCount >= 2) {
+            float resistanceAtMinCurrent = regressedInternalResistanceSlope * minCurrent + regressedInternalResistanceIntercept;
+            float resistanceAtMaxCurrent = regressedInternalResistanceSlope * maxCurrent + regressedInternalResistanceIntercept;
+
+            if ((resistanceAtMinCurrent >= minResistance && resistanceAtMinCurrent <= maxResistance) ||
+                (resistanceAtMaxCurrent >= minResistance && resistanceAtMaxCurrent <= maxResistance)) {
+                int y1 = mapf(resistanceAtMinCurrent, minResistance, maxResistance, graphYEnd, graphYStart);
+                int y2 = mapf(resistanceAtMaxCurrent, minResistance, maxResistance, graphYEnd, graphYStart);
+
+                // Draw the regression line
+                tft.drawLine(graphXStart, y1, graphXEnd, y2, TFT_WHITE);
+
+                // Add a label for the line
+                tft.setTextSize(1);
+                tft.setTextColor(TFT_WHITE);
+                char buffer[50];
+                snprintf(buffer, sizeof(buffer), "Rint(LU): %.2f + %.2f*I", regressedInternalResistanceIntercept, regressedInternalResistanceSlope);
+                tft.setCursor(graphXEnd - 150, y2 - 10); // Adjust position as needed
+                tft.print(buffer);
+                // tft.print((char)937); //ohm
+            } else {
+                tft.setTextSize(1);
+                tft.setTextColor(TFT_WHITE);
+                tft.setCursor(graphXStart + 10, graphYStart + 10); // Adjust position as needed
+                tft.print("Rint(LU) out of range");
+            }
+        } else if (resistanceDataCount == 1) {
+            // If only one point, might want to show it as a single point or handle differently
+            int overallResistanceY = mapf(internalResistanceData[0][1], minResistance, maxResistance, graphYEnd, graphYStart);
+            tft.drawCircle(mapf(internalResistanceData[0][0], minCurrent, maxCurrent, graphXStart, graphXEnd), overallResistanceY, 2, TFT_WHITE);
+        } else {
+            tft.setTextSize(1);
+            tft.setTextColor(TFT_WHITE);
+            tft.setCursor(graphXStart + 10, graphYStart + 20); // Adjust position as needed
+            tft.print("No Rint(LU) regression");
+        }
+    }
+
+    // --- Add the overall internal resistance line and label (Pairs Regression) ---
+    if (dataFound) {
+        if (resistanceDataCountPairs >= 2) {
+            float resistanceAtMinCurrentPairs = regressedInternalResistancePairsSlope * minCurrent + regressedInternalResistancePairsIntercept;
+            float resistanceAtMaxCurrentPairs = regressedInternalResistancePairsSlope * maxCurrent + regressedInternalResistancePairsIntercept;
+
+            if ((resistanceAtMinCurrentPairs >= minResistance && resistanceAtMinCurrentPairs <= maxResistance) ||
+                (resistanceAtMaxCurrentPairs >= minResistance && resistanceAtMaxCurrentPairs <= maxResistance)) {
+                int y1 = mapf(resistanceAtMinCurrentPairs, minResistance, maxResistance, graphYEnd, graphYStart);
+                int y2 = mapf(resistanceAtMaxCurrentPairs, minResistance, maxResistance, graphYEnd, graphYStart);
+
+                // Draw the regression line (using a different color if desired)
+                tft.drawLine(graphXStart, y1, graphXEnd, y2, TFT_GREEN);
+
+                // Add a label for the line
+                tft.setTextSize(1);
+                tft.setTextColor(TFT_GREEN);
+                char buffer[50];
+                snprintf(buffer, sizeof(buffer), "Rint(Pair): %.2f + %.2f*I", regressedInternalResistancePairsIntercept, regressedInternalResistancePairsSlope);
+                tft.setCursor(graphXEnd - 150, y2 + 10); // Adjust position as needed
+                tft.print(buffer);
+                // tft.print((char)937); //ohm
+            } else {
+                tft.setTextSize(1);
+                tft.setTextColor(TFT_GREEN);
+                tft.setCursor(graphXStart + 10, graphYStart + 30); // Adjust position as needed
+                tft.print("Rint(Pair) out of range");
+            }
+        } else if (resistanceDataCountPairs == 1) {
+            // If only one point, might want to show it as a single point or handle differently
+            int overallResistanceY = mapf(internalResistanceDataPairs[0][1], minResistance, maxResistance, graphYEnd, graphYStart);
+            tft.drawCircle(mapf(internalResistanceDataPairs[0][0], minCurrent, maxCurrent, graphXStart, graphXEnd), overallResistanceY, 2, TFT_GREEN);
+        } else {
+            tft.setTextSize(1);
+            tft.setTextColor(TFT_GREEN);
+            tft.setCursor(graphXStart + 10, graphYStart + 40); // Adjust position as needed
+            tft.print("No Rint(Pair) regression");
+        }
+    }
+    
 
     // --- Add a legend ---
     tft.setTextSize(1);
@@ -1542,12 +1677,12 @@ void storeOrAverageResistanceData(float current, float resistance, float data[][
 
                     // Define isolation threshold based on mean and standard deviation
                     isolationThreshold = meanSpacing + 1.5f * stdDevSpacing; // Adjust the multiplier as needed
-                    if (isolationThreshold <= 0) isolationThreshold = 0.1f; // Ensure a minimum threshold
+                    if (isolationThreshold <= 0) isolationThreshold = 0.02f; // Ensure a minimum threshold
                 } else {
-                    isolationThreshold = 0.1f; // Default if only one spacing
+                    isolationThreshold = 0.02f; // Default if only one spacing
                 }
             } else {
-                isolationThreshold = 0.1f; // Default if less than 2 points
+                isolationThreshold = 0.02f; // Default if less than 2 points
             }
 
             bool isIsolated = true;
@@ -1596,6 +1731,89 @@ void storeOrAverageResistanceData(float current, float resistance, float data[][
         }
     }
 }
+
+// --- New function to distribute error ---
+void distribute_error(float data[][2], int count, float spacing_threshold, float error_threshold_multiplier) {
+    if (count < 4) return; // Need at least 4 points for a cluster
+
+    for (int i = 0; i <= count - 4; ++i) {
+        // Check for a potential cluster of at least 4 points
+        for (int j = i + 3; j < count; ++j) {
+            if (data[j][0] - data[i][0] <= spacing_threshold) {
+                // Found a cluster from index i to j (inclusive)
+                std::vector<float> cluster_resistances;
+                for (int k = i; k <= j; ++k) {
+                    cluster_resistances.push_back(data[k][1]);
+                }
+
+                if (cluster_resistances.size() >= 4) {
+                    float sum_resistance = std::accumulate(cluster_resistances.begin(), cluster_resistances.end(), 0.0f);
+                    float average_resistance = sum_resistance / cluster_resistances.size();
+                    float std_dev_resistance = standardDeviation(cluster_resistances);
+
+                    std::vector<int> high_error_indices;
+                    for (int k = i; k <= j; ++k) {
+                        if (std::fabs(data[k][1] - average_resistance) > error_threshold_multiplier * std_dev_resistance) {
+                            high_error_indices.push_back(k);
+                        }
+                    }
+
+                    if (!high_error_indices.empty()) {
+                        // Distribute the error by setting high error points to the average
+                        for (int index : high_error_indices) {
+                            data[index][1] = average_resistance;
+                        }
+                        // Optionally, you could implement a more sophisticated error distribution here
+                        // e.g., shifting the difference proportionally to other points in the cluster.
+                    }
+                    // Move the outer loop index 'i' to the end of the current cluster
+                    // to avoid re-processing overlapping clusters immediately.
+                    i = j;
+                    break; // Break the inner loop 'j' as we've processed this cluster
+                }
+            } else {
+                break; // Points are no longer closely spaced, move to the next potential starting point 'i'
+            }
+        }
+    }
+}
+
+
+
+// --- Linear Regression Function ---
+bool performLinearRegression(float data[][2], int count, float& slope, float& intercept) {
+    if (count < 2) {
+        Serial.println("Insufficient data points for linear regression.");
+        return false;
+    }
+
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    float sumXY = 0.0f;
+    float sumX2 = 0.0f;
+
+    for (int i = 0; i < count; ++i) {
+        sumX += data[i][0];
+        sumY += data[i][1];
+        sumXY += data[i][0] * data[i][1];
+        sumX2 += data[i][0] * data[i][0];
+    }
+
+    float n = static_cast<float>(count);
+    float denominator = n * sumX2 - sumX * sumX;
+
+    if (std::fabs(denominator) < 1e-6) { // Avoid division by zero
+        Serial.println("Denominator is too small for linear regression.");
+        return false;
+    }
+
+    slope = (n * sumXY - sumX * sumY) / denominator;
+    intercept = (sumY - slope * sumX) / n;
+
+    return true;
+}
+
+
 
 /**
  * Measures the MH electrode voltage by comparing unloaded vs loaded voltages
@@ -1694,12 +1912,13 @@ int findOptimalChargingDutyCycle() {
             storeOrAverageResistanceData(currentData.current, std::fabs(internalResistanceLU), internalResistanceData, resistanceDataCount);
             bubbleSort(internalResistanceData, resistanceDataCount); // Sort after adding
         }
-
+        
         // --- Check cache for more opportunities to calculate internal resistance (Pair) ---
         for (const auto& cachedData : dataCache) {
             if (std::fabs(currentData.current - cachedData.current) > MIN_CURRENT_DIFFERENCE_FOR_PAIR) {
                 float internalResistancePair = (cachedData.loadedVoltage - currentData.loadedVoltage) / (currentData.current - cachedData.current);
-                storeOrAverageResistanceData(currentData.current, std::fabs(internalResistancePair), internalResistanceDataPairs, resistanceDataCountPairs);
+                float higherCurrent = std::max(currentData.current, cachedData.current);
+                storeOrAverageResistanceData(higherCurrent, std::fabs(internalResistancePair), internalResistanceDataPairs, resistanceDataCountPairs);
                 bubbleSort(internalResistanceDataPairs, resistanceDataCountPairs); // Sort after adding
             }
         }
@@ -1746,9 +1965,10 @@ int findOptimalChargingDutyCycle() {
 
         // --- Check cache for more opportunities to calculate internal resistance (Pair) ---
         for (const auto& cachedData : dataCache) {
-            if (std::fabs(currentData.current - cachedData.current) > MIN_CURRENT_DIFFERENCE_FOR_PAIR) {
+            if (std::abs(currentData.current - cachedData.current) > MIN_CURRENT_DIFFERENCE_FOR_PAIR) {
                 float internalResistancePair = (cachedData.loadedVoltage - currentData.loadedVoltage) / (currentData.current - cachedData.current);
-                storeOrAverageResistanceData(currentData.current, std::fabs(internalResistancePair), internalResistanceDataPairs, resistanceDataCountPairs);
+                float higherCurrent = std::max(currentData.current, cachedData.current);
+                storeOrAverageResistanceData(higherCurrent, std::abs(internalResistancePair), internalResistanceDataPairs, resistanceDataCountPairs);
                 bubbleSort(internalResistanceDataPairs, resistanceDataCountPairs); // Sort after adding
             }
         }
@@ -1766,12 +1986,38 @@ int findOptimalChargingDutyCycle() {
     }
 */
 
+   // Perform error distribution on the collected Loaded/Unloaded resistance data
+    distribute_error(internalResistanceData, resistanceDataCount, 0.05f, 1.05f); // Example parameters, adjust as needed
+
+    // Perform error distribution on the collected paired resistance data
+    distribute_error(internalResistanceDataPairs, resistanceDataCountPairs, 0.05f, 1.05f); // Example parameters, adjust as needed
+
     // Final measurement at the optimal duty cycle
     MHElectrodeData finalData = measureMHElectrodeVoltage(optimalDutyCycle);
     targetVoltage = initialUnloadedVoltage + (finalData.loadedVoltage - initialUnloadedVoltage) * MH_ELECTRODE_RATIO;
 
     Serial.printf("Optimal charging duty cycle found: %d (loaded: %.3fV, target: %.3fV, diff: %.3fV)\n",
                  optimalDutyCycle, finalData.loadedVoltage, targetVoltage, fabs(finalData.loadedVoltage - targetVoltage));
+
+    // Perform linear regression after finding the optimal duty cycle
+    if (resistanceDataCount >= 2) {
+        if (performLinearRegression(internalResistanceData, resistanceDataCount, regressedInternalResistanceSlope, regressedInternalResistanceIntercept)) {
+            Serial.printf("Regressed Internal Resistance (Loaded/Unloaded): Slope = %.4f, Intercept = %.4f\n",
+                          regressedInternalResistanceSlope, regressedInternalResistanceIntercept);     
+        }
+    } else {
+        Serial.println("Not enough data points for linear regression of Loaded/Unloaded resistance.");
+    }
+
+    if (resistanceDataCountPairs >= 2) {
+        if (performLinearRegression(internalResistanceDataPairs, resistanceDataCountPairs, regressedInternalResistancePairsSlope, regressedInternalResistancePairsIntercept)) {
+            Serial.printf("Regressed Internal Resistance (Pairs): Slope = %.4f, Intercept = %.4f\n",
+                          regressedInternalResistancePairsSlope, regressedInternalResistancePairsIntercept);
+        }
+    } else {
+        Serial.println("Not enough data points for linear regression of paired resistance.");
+    }
+
 
     return optimalDutyCycle;
 }
