@@ -465,9 +465,9 @@ void task_readThermistor(void* parameter) {
         double time_elapsed_hours = (double)time_elapsed / (1000.0 * 3600.0);
         double current_for_mah_calculation_ma;
 
-        if (currentModel.isModelBuilt) {
+        if (currentModel.isModelBuilt&& (current_ma/1000.0)<MEASURABLE_CURRENT_THRESHOLD) {
             // Use the estimated current for mAh calculation
-            current_for_mah_calculation_ma = static_cast<double>(estimateCurrent(dutyCycle)); // Convert Amps to mA
+            current_for_mah_calculation_ma = static_cast<double>(estimateCurrent(dutyCycle)*1000.0); // Convert Amps to mA
         } else {
             // Use the measured current for mAh calculation
             current_for_mah_calculation_ma = current_ma;
@@ -2161,6 +2161,39 @@ int findOptimalChargingDutyCycle(int maxChargeDutyCycle, int suggestedStartDutyC
 }
 
 
+// Function to estimate temperature difference (in °C) due to heating by current
+float estimateTempDiff(float voltageUnderLoad, float voltageNoLoad, 
+                         float current, float internalResistance, 
+                         float ambientTempC) {
+  // Calculate electrical power dissipated (in Watts)
+  // (This assumes that the voltage drop due to the internal resistance is given by I*R)
+  float power = current * current * internalResistance;
+  
+  // Assumed battery parameters for a AAA NiMH cell:
+  // Estimated surface area (m^2) of a typical AAA cell (~44mm x 10mm cylinder)
+  float A = 0.0015; // m^2
+  
+  // Convective heat transfer coefficient (W/m^2·K)
+  float h = 10.0;
+  
+  // Radiation parameters
+  float epsilon = 0.9;           // Emissivity (dimensionless)
+  float sigma = 5.67e-8;         // Stefan-Boltzmann constant (W/m^2·K^4)
+  
+  // Convert ambient temperature from Celsius to Kelvin
+  float T_ambient = ambientTempC + 273.15;
+  
+  // Effective thermal conductance (W/K)
+  // For small ΔT, the radiation term can be linearized: 
+  //   Radiation loss ≈ 4 * ε * σ * A * T_ambient^3 * ΔT
+  float G = h * A + 4 * epsilon * sigma * A * pow(T_ambient, 3);
+  
+  // Estimate temperature rise (ΔT in Kelvin, equivalent to °C difference)
+  float deltaT = power / G;
+  
+  return deltaT;
+}
+
 
 /**
  * Main charging function - starts, monitors, and stops battery charging
@@ -2225,8 +2258,15 @@ bool chargeBattery() {
     float current;
 
     getThermistorReadings(temp1, temp2, tempDiff, t1_millivolts, voltage, current);
+    
+    float tempRise = estimateTempDiff(voltage, voltage, current, regressedInternalResistancePairsIntercept, temp1); // if 0 then no power
+  
+    Serial.print("Estimated temperature rise due to Rint heating: ");
+    Serial.print(tempRise);
+    Serial.println(" °C");
+    
     // Check if temperature difference exceeds threshold - stop charging if it does
-    if (tempDiff > MAX_TEMP_DIFF_THRESHOLD) {
+    if (tempDiff > (MAX_TEMP_DIFF_THRESHOLD+tempRise)) {
         Serial.printf("Temperature difference (%.2f°C) exceeds threshold (%.2f°C), stopping charging\n",
                       tempDiff, MAX_TEMP_DIFF_THRESHOLD);
 
