@@ -2407,7 +2407,7 @@ int testGraph() {
     return 0;
 }
 // Define the grid dimensions
-const int GRID_SIZE = 16;
+const int GRID_SIZE = 18;
 
 // Define a score type for the grid
 using ScoreType = int;
@@ -2647,16 +2647,16 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
     #endif
     // --- Draw dynamic value labels with collision avoidance using the grid ---
     std::vector<Label> labels;
-    float labelLineLengthFactor = 0.20f; // Make the initial lines shorter, like ticks
+    float labelLineLengthFactor = 0.10f; // Make the initial lines shorter, like ticks
 #define LABEL_LINE_LENGTH 30
     int maxLabelLineLength = static_cast<int>(plotAreaWidth * 0.1f); // Max length for magnitude representation
-    float darkeningFactor = 0.1f;
+    float darkeningFactor = 0.0f;
     int textSpacing = 0;
     int tickLength = 10; // Length of supplementary ticks
     int supplementaryTickLength = 5;
-    int labelPadding = 2; // Increased padding
+    int labelPadding = 3; // Increased padding
     int labelMarkingScore = 5; // Score to add when marking label as placed
-
+    int labelDisplayThreshold = 4 ; // can place labels on grid above this threshold
     // Hardcoded value ranges for magnitude representation (example values, adjust as needed)
     std::map<std::string, std::pair<float, float>> hardcodedRanges = {
         {"Current", {0.0f, 0.4f}},
@@ -2679,7 +2679,9 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
         std::stringstream ss;
         ss << std::fixed << std::setprecision(2) << value;
         std::string text = ss.str();
-        uint16_t darkColor = darkerColor(color, darkeningFactor);
+        
+        uint16_t darkColor = color;
+        if (darkeningFactor > 0) {darkColor = darkerColor(color, darkeningFactor);} // if zero do not gray 
 
         int tw = tft.textWidth(text.c_str(), 1);
         int th = tft.fontHeight(1);
@@ -2789,7 +2791,7 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
 
         for (int r = startRow; r <= endRow; ++r) {
             for (int c = startCol; c <= endCol; ++c) {
-                if (grid(r, c) > 1) {
+                if (grid(r, c) > labelDisplayThreshold) {
                     #ifdef DEBUG_LABELS
                     Serial.print("Grid Cell at Row: "); Serial.print(r); Serial.print(", Col: "); Serial.print(c); Serial.print(" has score: "); Serial.println(grid(r, c));
                     #endif
