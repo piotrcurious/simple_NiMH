@@ -173,10 +173,10 @@ volatile uint32_t mAh_last_time = 0; // Keep track of the last time mAh was upda
 #define PWM_PIN 19
 
 // Fixed temperature ranges for scaling the plot - ADJUST IF NEEDED
-const double MIN_TEMP             = 15.0;
-const double MAX_TEMP             = 30.0;
-const double MIN_DIFF_TEMP        = -0.5; // Difference range 
-const double MAX_DIFF_TEMP        = 1.5;
+const float MIN_TEMP             = 15.0;
+const float MAX_TEMP             = 30.0;
+const float MIN_DIFF_TEMP        = -0.5; // Difference range 
+float MAX_DIFF_TEMP        = 1.5;
 
 // Fixed voltage range for scaling the voltage plot
 const float MIN_VOLTAGE = 1.0f;
@@ -583,7 +583,17 @@ void setup() {
 
     setupPWM(); // Initialize PWM
 
-    Serial.println("TFT and Temperature Sensor Example Started");
+    Serial.println("Ni-Cd/Ni-MH battery charger. use samsung DVD remote to control");
+    Serial.println("PLAY to measure internal resistance of battery");
+    Serial.println("INFO to see internal resistance graph");
+    Serial.println("POWER to start charging");
+    Serial.println("SOURCE to see charge graph");
+#ifdef DEBUG_LABELS
+    Serial.println("0 for charge graph test and label placement test");
+#endif //#ifdef DEBUG_LABELS    
+    
+
+    
 
     // Start internal resistance measurement at startup for demonstration
    // isMeasuringResistance = true;
@@ -1687,10 +1697,10 @@ void plotVoltageData() {
     min_voltage = fmax(min_voltage, 1.15f);
     max_voltage = fmin(max_voltage, 3.0f);
 
-    Serial.print("Calculated min_voltage: ");
-    Serial.println(min_voltage);
-    Serial.print("Calculated max_voltage: ");
-    Serial.println(max_voltage);
+//    Serial.print("Calculated min_voltage: ");
+//    Serial.println(min_voltage);
+//    Serial.print("Calculated max_voltage: ");
+//    Serial.println(max_voltage);
 
     if (min_voltage == max_voltage) {
         // Handle the case where all voltage values are the same or NaN
@@ -2371,7 +2381,7 @@ float estimateTempDiff(float voltageUnderLoad, float voltageNoLoad,
   float A = 0.001477 ; // m^2 for 10mm and 42mm
   
   // Convective heat transfer coefficient (W/m^2·K)
-  float h = 8.0;
+  float h = 4.0;
   
   // Radiation parameters
   float epsilon = 0.9;           // Emissivity (dimensionless)
@@ -2409,8 +2419,9 @@ int testGraph() {
 // Define the grid dimensions
 const int GRID_SIZE = 18;
 
-// Define a score type for the grid
-using ScoreType = int;
+// Define a score type for the grid. remember to clamp scores to max. 
+//using ScoreType = int;
+using ScoreType = int8_t;
 
 // Function to map pixel coordinates to grid indices
 std::pair<int, int> pixelToGrid(int x, int y, int plotAreaWidth, int plotAreaHeight, int marginX, int marginYTop) {
@@ -2506,22 +2517,33 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
             dutyCycleMin = std::fmin(dutyCycleMin, (float)logEntry.dutyCycle);
             dutyCycleMax = std::fmax(dutyCycleMax, (float)logEntry.dutyCycle);
             float currentTempDiff = logEntry.batteryTemperature - logEntry.ambientTemperature;
-            tempDiffMin = std::fmin(tempDiffMin, currentTempDiff);
-            tempDiffMax = std::fmax(tempDiffMax, currentTempDiff);
-            float estimatedDiff = estimateTempDiff(logEntry.voltage, logEntry.voltage, logEntry.current, regressedInternalResistanceIntercept, logEntry.ambientTemperature);
+            tempDiffMin = std::fmin(tempDiffMin, currentTempDiff);    //same as tempdiff minimum..
+//            tempDiffMax = std::fmax(tempDiffMax, currentTempDiff);
+            float estimatedDiff = estimateTempDiff(logEntry.voltage, logEntry.voltage, logEntry.current, regressedInternalResistancePairsIntercept, logEntry.ambientTemperature);
             float thresholdValue = MAX_TEMP_DIFF_THRESHOLD + estimatedDiff;
-            estTempDiffThresholdMin = std::fmin(estTempDiffThresholdMin, thresholdValue);
-            estTempDiffThresholdMax = std::fmax(estTempDiffThresholdMax, thresholdValue);
-            irLU_Min = std::fmin(irLU_Min, logEntry.internalResistanceLoadedUnloaded);
+//            estTempDiffThresholdMin = std::fmin(estTempDiffThresholdMin, thresholdValue); 
+            estTempDiffThresholdMin = std::fmin(estTempDiffThresholdMin, currentTempDiff);  //.. same as tempdiff minimum for full tempdiff swing 
+
+            estTempDiffThresholdMax = std::fmax(estTempDiffThresholdMax, thresholdValue/2.0);
+//            tempDiffMin = std::fmin(tempDiffMin, thresholdValue);   //same as cutoff threshold to visualize headroom until tripping
+            tempDiffMax = std::fmax(tempDiffMax, thresholdValue/2.0);
+            
+ //           irLU_Min = std::fmin(irLU_Min, logEntry.internalResistanceLoadedUnloaded);
+            irLU_Min = std::fmin(irLU_Min, logEntry.internalResistancePairs);  // minimum set to lower resistance minimum to visualize difference
             irLU_Max = std::fmax(irLU_Max, logEntry.internalResistanceLoadedUnloaded);
-            irPairs_Min = std::fmin(irPairs_Min, logEntry.internalResistancePairs);
-            irPairs_Max = std::fmax(irPairs_Max, logEntry.internalResistancePairs);
+            
+            irPairs_Min = std::fmin(irPairs_Min, logEntry.internalResistancePairs); // set to lower resistance
+//            irPairs_Max = std::fmax(irPairs_Max, logEntry.internalResistancePairs);
+//            irPairs_Min = std::fmin(irPairs_Min, logEntry.internalResistanceLoadedUnloaded); 
+            irPairs_Max = std::fmax(irPairs_Max, logEntry.internalResistanceLoadedUnloaded);// same as iRLU to visualize difference in internal resistance
+
+        
         }
         // Add some padding if needed
         if (currentMin == currentMax) { currentMin -= 0.1; currentMax += 0.1; }
         if (voltageMin == voltageMax) { voltageMin -= 0.1; voltageMax += 0.1; }
         if (dutyCycleMin == dutyCycleMax) { dutyCycleMin -= 1; dutyCycleMax += 1; }
-        if (tempDiffMin == tempDiffMax) { tempDiffMin -= 1; tempDiffMax += 1; }
+        if (tempDiffMin == tempDiffMax) { tempDiffMin -= 0.1; tempDiffMax += 0.1; }
         if (estTempDiffThresholdMin == estTempDiffThresholdMax) { estTempDiffThresholdMin -= 0.1; estTempDiffThresholdMax += 0.1; }
         if (irLU_Min == irLU_Max) { irLU_Min -= 0.01; irLU_Max += 0.01; }
         if (irPairs_Min == irPairs_Max) { irPairs_Min -= 0.01; irPairs_Max += 0.01; }
@@ -2579,7 +2601,7 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
             for (int step = 0; step <= std::max(dx, dy); ++step) {
                 std::pair<int, int> gridPos = pixelToGrid(currentX, currentY, plotAreaWidth, plotAreaHeight, marginX, marginYTop);
                 if (gridPos.first != -1) {
-                    grid(gridPos.first, gridPos.second)++; // Increment score
+                    if(grid(gridPos.first, gridPos.second)<127){grid(gridPos.first, gridPos.second)++;} // Increment score and clamp to int8_t
                 }
                 if (err > 0) {
                     err -= dy;
@@ -2615,13 +2637,13 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
         drawLineAndUpdateGrid(x1, y1, x2, y2, TFT_BLUE);
 
         // Estimated Temperature Difference Threshold
-        float estimatedDiffPrev = estimateTempDiff(chargeLog[i - 1].voltage, chargeLog[i - 1].voltage, chargeLog[i - 1].current, regressedInternalResistanceIntercept, chargeLog[i - 1].ambientTemperature);
+        float estimatedDiffPrev = estimateTempDiff(chargeLog[i - 1].voltage, chargeLog[i - 1].voltage, chargeLog[i - 1].current, regressedInternalResistancePairsIntercept, chargeLog[i - 1].ambientTemperature);
         float thresholdValuePrev = MAX_TEMP_DIFF_THRESHOLD + estimatedDiffPrev;
-        float estimatedDiffCurr = estimateTempDiff(chargeLog[i].voltage, chargeLog[i].voltage, chargeLog[i].current, regressedInternalResistanceIntercept, chargeLog[i].ambientTemperature);
+        float estimatedDiffCurr = estimateTempDiff(chargeLog[i].voltage, chargeLog[i].voltage, chargeLog[i].current, regressedInternalResistancePairsIntercept, chargeLog[i].ambientTemperature);
         float thresholdValueCurr = MAX_TEMP_DIFF_THRESHOLD + estimatedDiffCurr;
         y1 = scaleValue(thresholdValuePrev, estTempDiffThresholdMin, estTempDiffThresholdMax);
         y2 = scaleValue(thresholdValueCurr, estTempDiffThresholdMin, estTempDiffThresholdMax);
-        drawLineAndUpdateGrid(x1, y1, x2, y2, TFT_SKYBLUE);
+        drawLineAndUpdateGrid(x1, y1, x2, y2, TFT_RED);
 
         // Internal Resistance Loaded/Unloaded
         y1 = scaleValue(chargeLog[i - 1].internalResistanceLoadedUnloaded, irLU_Min, irLU_Max);
@@ -2726,8 +2748,8 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
     labels.push_back(createLabel("DutyCycle", dutyCycleMin, dutyCycleMin, dutyCycleMax, TFT_DARKGREY));
     labels.push_back(createLabel("TempDiff", tempDiffMax, tempDiffMin, tempDiffMax, TFT_BLUE));
     labels.push_back(createLabel("TempDiff", tempDiffMin, tempDiffMin, tempDiffMax, TFT_BLUE));
-    labels.push_back(createLabel("EstTempDiffThreshold", estTempDiffThresholdMax, estTempDiffThresholdMin, estTempDiffThresholdMax, TFT_SKYBLUE));
-    labels.push_back(createLabel("EstTempDiffThreshold", estTempDiffThresholdMin, estTempDiffThresholdMin, estTempDiffThresholdMax, TFT_SKYBLUE));
+    labels.push_back(createLabel("EstTempDiffThreshold", estTempDiffThresholdMax, estTempDiffThresholdMin, estTempDiffThresholdMax, TFT_RED));
+    labels.push_back(createLabel("EstTempDiffThreshold", estTempDiffThresholdMin, estTempDiffThresholdMin, estTempDiffThresholdMax, TFT_RED));
     labels.push_back(createLabel("IrLU", irLU_Max, irLU_Min, irLU_Max, TFT_ORANGE));
     labels.push_back(createLabel("IrLU", irLU_Min, irLU_Min, irLU_Max, TFT_ORANGE));
     labels.push_back(createLabel("IrPairs", irPairs_Max, irPairs_Min, irPairs_Max, TFT_CYAN));
@@ -2822,7 +2844,7 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
         for (int r = startRow; r <= endRow; ++r) {
             for (int c = startCol; c <= endCol; ++c) {
                 if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE) {
-                    grid(r, c) += labelMarkingScore; // Mark as occupied by a label
+                    if ( (int)(grid(r, c)+labelMarkingScore) < 127 ) {grid(r, c) += labelMarkingScore;} // Mark as occupied by a label
                 }
             }
         }
@@ -2905,9 +2927,9 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
                         label.y = originalLabelY; // Restore original label.y
 
                        if (canPlace) {
-                            tft.setTextColor(label.color);
-                            tft.drawString(label.text.c_str(), textX, newTextY, 1);
-                            tft.drawLine(label.lineStartX, label.lineY, label.lineEndX, label.lineY, label.color);
+           //                 tft.setTextColor(label.color);
+           //                 tft.drawString(label.text.c_str(), textX, newTextY, 1);
+           //                 tft.drawLine(label.lineStartX, label.lineY, label.lineEndX, label.lineY, label.color);
                             //drawGridSquare(row, col, TFT_GREEN);
 
                             // --- Update label text and y based on the new position ---
@@ -2916,6 +2938,11 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
                             ss << std::fixed << std::setprecision(2) << newDataValue;
                             label.text = ss.str();
                             label.y = newTextY; // Update the actual label.y HERE, before marking
+            // draw AFTER update
+                            tft.setTextColor(label.color);
+                            tft.drawString(label.text.c_str(), textX, newTextY, 1);
+                            tft.drawLine(label.lineStartX, label.lineY, label.lineEndX, label.lineY, label.color);
+                            //drawGridSquare(row, col, TFT_GREEN);
 
                             markLabelAsPlaced(label, row, col); // Mark the area as occupied
                             placed = true;
@@ -2973,7 +3000,7 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
 
     // Draw time axis labels
     tft.setTextColor(TFT_WHITE);
-    tft.setTextDatum(2); // TL_DATUM
+    tft.setTextDatum(TL_DATUM); // TL_DATUM
     if (autoscaleX && endTime > startTime) {
         for (int i = 0; i <= 5; ++i) {
             unsigned long timePoint = startTime + (endTime - startTime) * i / 5;
@@ -3010,7 +3037,7 @@ void drawChargePlot(bool autoscaleX, bool autoscaleY) {
     tft.drawString("dT", legendX + textOffset, legendY, 1);
     legendX += 40;
 
-    tft.fillRect(legendX, legendY, colorSize, colorSize, TFT_SKYBLUE);
+    tft.fillRect(legendX, legendY, colorSize, colorSize, TFT_RED);
     tft.drawString("dT/", legendX + textOffset, legendY, 1);
 
     legendX = marginX;
@@ -3095,10 +3122,18 @@ bool chargeBattery() {
 
         return false;
     }
+    
 
+    // Periodically re-evaluate the MH electrode voltage and adjust charging current
+    currentTime = millis();
+    if (currentTime - lastChargeEvaluationTime > CHARGE_EVALUATION_INTERVAL_MS) {
+
+
+//check for overcharge from over temperature
+    Serial.println("end of charge by temperature delta check...");
 
     // Get current temperature and voltage readings
-//    float temp1, temp2, tempDiff, t1_millivolts, voltage, current;
+    //    float temp1, temp2, tempDiff, t1_millivolts, voltage, current;
     double temp1, temp2, tempDiff;
     float t1_millivolts;
     float voltage;
@@ -3106,37 +3141,34 @@ bool chargeBattery() {
 
     getThermistorReadings(temp1, temp2, tempDiff, t1_millivolts, voltage, current);
     
-    float tempRise = estimateTempDiff(voltage, voltage, current, (regressedInternalResistanceIntercept), temp1); // if 0 then no power
+//    float tempRise = estimateTempDiff(voltage, voltage, current, (regressedInternalResistanceIntercept), temp1); // if 0 then no power
+    float tempRise = estimateTempDiff(voltage, voltage, current, (regressedInternalResistancePairsIntercept), temp1); // if 0 then no power
   // resistance of MH electrode sums with internal resistance. 
     Serial.print("Estimated temperature rise due to Rint heating: ");
     Serial.print(tempRise);
-    Serial.println(" °C");
-    
+    Serial.println(" °C");  
     // Check if temperature difference exceeds threshold - stop charging if it does
+    MAX_DIFF_TEMP = (MAX_TEMP_DIFF_THRESHOLD+tempRise); // update max graph to visualize shutdown threshold
     if (tempDiff > (MAX_TEMP_DIFF_THRESHOLD+tempRise)) {
         Serial.printf("Temperature difference (%.2f°C) exceeds threshold (%.2f°C), stopping charging\n",
                       tempDiff, MAX_TEMP_DIFF_THRESHOLD);
-
+      
         // Stop charging
         dutyCycle = 0;
         analogWrite(pwmPin, 0);
         isCharging = false;
-
         return false;
     }
+// end of over temperature check
 
-    // Periodically re-evaluate the MH electrode voltage and adjust charging current
-    currentTime = millis();
-    if (currentTime - lastChargeEvaluationTime > CHARGE_EVALUATION_INTERVAL_MS) {
         Serial.println("Re-evaluating charging parameters...");
-
         // Temporarily pause charging to measure unloaded voltage
         dutyCycle = 0;
         analogWrite(pwmPin, 0);
         delay(UNLOADED_VOLTAGE_DELAY_MS);
 
         // Calculate the starting duty cycle for the next evaluation
-        int suggestedStartDutyCycle = min(lastOptimalDutyCycle + (int)(1.0 * lastOptimalDutyCycle), MAX_CHARGE_DUTY_CYCLE);
+        int suggestedStartDutyCycle = min(lastOptimalDutyCycle + (int)(1.0 * lastOptimalDutyCycle), MAX_CHARGE_DUTY_CYCLE); //TODO: - this is all fudge factoring
 
         // Find the optimal charging duty cycle again, starting from the suggested value
 //        chargingDutyCycle = findOptimalChargingDutyCycle(MAX_CHARGE_DUTY_CYCLE, suggestedStartDutyCycle);
@@ -3282,27 +3314,28 @@ void handleIRCommand() {
         case RemoteKeys::KEY_INFO:{        
           if (!isMeasuringResistance) {
           displayInternalResistanceGraph(); // Display the internal resistance graph after measurement
-          delay(10000); // wait 10 seconds
+          delay(15000); // wait 10 seconds
         }
         break;
         }    
 
         case RemoteKeys::KEY_SOURCE:{        
           drawChargePlot(true,true); // Display the charging process log graph
-          delay(10000); // wait 10 seconds
+          delay(20000); // wait 10 seconds
           tft.fillScreen(TFT_BLACK); // clear junk afterwards
 
         break;
         }    
 
+#ifdef DEBUG_LABELS
           case RemoteKeys::KEY_0:{        
-//          drawChargePlot(true,true); // Display the charging process log graph
           testGraph();
-          delay(10000); // wait 10 seconds
+          delay(20000); // wait 10 seconds
           tft.fillScreen(TFT_BLACK); // clear junk afterwards
 
         break;
         }    
+#endif // #ifdef DEBUG_LABELS
 
         case RemoteKeys::KEY_POWER:{        
         resetAh = true; // reset mAh counter
