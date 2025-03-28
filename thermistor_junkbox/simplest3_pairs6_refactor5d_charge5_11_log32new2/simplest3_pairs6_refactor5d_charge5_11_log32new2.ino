@@ -29,6 +29,9 @@
 
  // Constants for battery charging
 const float MAX_TEMP_DIFF_THRESHOLD = 0.9f;         // Maximum temperature difference in Celsius before stopping charge
+uint8_t overtemp_trip_counter = 0 ; // reset trip counter
+const uint8_t OVERTEMP_TRIP_TRESHOLD = 3 ; // re check that many times . increases immunity against transient ambient temperature changes . 3*2 = 6minutes 
+
 const float MH_ELECTRODE_RATIO = 0.6f;              // Target ratio for MH electrode voltage 
 const int CHARGE_EVALUATION_INTERVAL_MS = 120000;   // Re-evaluate charging parameters every 2 minutes
 // 600 points for 20 hours, so 19200 bytes data log . should fit into continous allocation of esp32 .. or not ...
@@ -3152,13 +3155,18 @@ bool chargeBattery() {
     if (tempDiff > (MAX_TEMP_DIFF_THRESHOLD+tempRise)) {
         Serial.printf("Temperature difference (%.2f°C) exceeds threshold (%.2f°C), stopping charging\n",
                       tempDiff, MAX_TEMP_DIFF_THRESHOLD);
-      
+
+        if (overtemp_trip_counter++ > OVERTEMP_TRIP_TRESHOLD) { // transient ambient temperature changes might trigger overtemperature tripping
+                                                                // this mechanism allows repeating the check before tripping. each theshold is one reevaluation period ofcourse
         // Stop charging
+        overtemp_trip_counter = 0 ; // reset trip counter
         dutyCycle = 0;
         analogWrite(pwmPin, 0);
         isCharging = false;
         return false;
+        } // if (overtemp_trip_counter ...
     }
+    
 // end of over temperature check
 
         Serial.println("Re-evaluating charging parameters...");
@@ -3221,6 +3229,7 @@ void startCharging() {
     tft.setTextSize(1);
     tft.setCursor(14*7, PLOT_Y_START + PLOT_HEIGHT + 20);
     tft.printf("CHARGING");
+    overtemp_trip_counter = 0 ; // reset trip counter
     isCharging = true;
     chargeBattery();
   } else {
@@ -3282,11 +3291,6 @@ void loop() {
     tft.setCursor(19*10, PLOT_Y_START + PLOT_HEIGHT + 20);
     tft.print(mAh_charged,3);
     tft.print(" mAh");
-    //controlPWM(); // Control the PWM on pin 19
-
-    //if (!isMeasuringResistance) {
-    //    displayInternalResistanceGraph(); // Display the internal resistance graph after measurement
-    //}
 
     // Handle IR remote
     if (IrReceiver.decode()) {
@@ -3296,10 +3300,11 @@ void loop() {
 
     handleBatteryCharging();
 
-    delay(500); // Reduced delay to make PWM more responsive, PWM timing is handled in controlPWM
+    delay(1000); // TODO: this sucks
 }
 
 void handleIRCommand() {
+    
       if (IrReceiver.decodedIRData.protocol == SAMSUNG) {
             if (IrReceiver.decodedIRData.address == 0x7) {
       //debug        
